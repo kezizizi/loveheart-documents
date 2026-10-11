@@ -166,8 +166,8 @@ def _query_panel():
             unsafe_allow_html=True,
         )
         col1, col2 = st.columns(2, gap="medium")
-        name = col1.text_input("姓名", key="ax_name", placeholder="例：张三")
-        sid = col2.text_input("学号", key="ax_sid", placeholder="例：2300017473")
+        name = col1.text_input("姓名", key="ax_name")
+        sid = col2.text_input("学号", key="ax_sid")
         clicked = st.button("生成我的爱心足迹", key="ax_submit", width="stretch")
     return name.strip(), sid.strip(), clicked
 
