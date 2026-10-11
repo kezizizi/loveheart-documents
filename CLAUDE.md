@@ -355,6 +355,19 @@ main_table_id = "「社员档案」主表的 table_id"
 - 中文字体 `assets/fonts/NotoSansSC-VF.ttf` 随仓库提交（SIL OFL 开源）；
   **不要换成微软雅黑/黑体**，那些是专有字体，放进公开仓库有授权风险。
 
+### ⚠️ 提交纪律（曾出过事故）
+
+- **不要盲目 `git add -A`。** 先 `git status --short` 与 `git diff --cached --stat` 看清暂存了什么
+  —— 曾有 AI 用 `-A` 把 `.streamlit/secrets.toml` 连同 `.gitignore` 的改动一起提交了。
+- **`.gitignore` 里的 `.streamlit/secrets.toml` 那一行不许删。**
+  有人会因为「Streamlit Cloud 读不到密钥」而想删掉它把文件传上去 —— 那是错的，见下条。
+- **密钥永远不入库。** 云端靠 **Streamlit Cloud 的 Settings → Secrets**（服务端加密保存）
+  注入，本地靠被忽略的 `secrets.toml`；`config.load_settings` 先读 `st.secrets` 再读环境变量。
+  两个来源都不需要文件进仓库。若密钥真的被推到 GitHub，**必须立即在飞书开放平台重置
+  app_secret**，因为该应用能读到社员档案（姓名/学号/院系）。
+- CI 有 `secret-scan` 任务兜底：一旦 `secrets.toml` 被跟踪、或代码里出现 `cli_` 开头的硬编码
+  凭证，流水线直接失败。
+
 ---
 
 ## 12. 已知限制与待办
