@@ -191,7 +191,7 @@ def _execute(query: tuple[str, str]) -> MemberQueryResult | None:
     name, sid = query
     placeholder = animations.heartbeat()
     try:
-        result = state.run_query(state.get_nonce(), name, sid)
+        result = state.run_query(name, sid)
     except Exception as exc:  # noqa: BLE001 - 统一转成页面提示
         st.session_state[_ERROR_KEY] = str(exc)
         return None
@@ -206,8 +206,7 @@ def _execute(query: tuple[str, str]) -> MemberQueryResult | None:
 
 
 def _render_result(result: MemberQueryResult, query: tuple[str, str]) -> None:
-    nonce = state.get_nonce()
-    as_of = state.data_as_of(nonce)
+    as_of = state.data_as_of()
 
     if not result.found:
         st.html(components.not_found_note(result.not_found_reason))
@@ -303,8 +302,10 @@ def _render_partners(result: MemberQueryResult, member) -> None:
         if st.button("统计同行伙伴", key="ax_partners_btn", width="stretch"):
             with st.spinner("正在翻活动签到表…"):
                 count, truncated = count_co_partners(
-                    state.get_client(), state.load_registry(state.get_nonce()),
-                    member, result.participations,
+                    state.get_client(),
+                    state.load_registry(),
+                    member,
+                    result.participations,
                 )
             st.session_state[_PARTNERS_KEY] = (count, truncated)
 
