@@ -1,0 +1,131 @@
+{
+  "P0lpbqm44a21zKswi6tcbEj2nHc": {
+    "tbliPIl5lYefS4Nr": [
+      {"field_id": "fldHTkdami", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fld25fuc9e", "field_name": "学号", "type": 1},
+      {"field_id": "fldLhdP8tJ", "field_name": "年级", "type": 3, "property": {"options": [{"name": "26本"}, {"name": "25本"}]}},
+      {"field_id": "fldcqkM6y8", "field_name": "性别", "type": 3, "property": {"options": [{"name": "男"}, {"name": "女"}]}},
+      {"field_id": "fldOmdGjy3", "field_name": "院系", "type": 3, "property": {"options": [{"name": "元培学院"}]}},
+      {"field_id": "fldm1P8RGF", "field_name": "入社时间", "type": 4, "property": {"options": [{"name": "25秋"}, {"name": "26秋"}]}},
+      {"field_id": "fldbsEpjNT", "field_name": "想对爱心社说的话", "type": 1},
+      {"field_id": "fldo6F18UI", "field_name": "主要活动/感兴趣的部组", "type": 4, "property": {"options": [{"name": "儿童部"}, {"name": "护老部"}]}},
+      {"field_id": "fldghL3dUR", "field_name": "自动编号", "type": 1005, "property": {"rules": [{"type": "incremental_number", "length": 3}]}},
+      {"field_id": "fld1Oi6awy", "field_name": "父记录", "type": 18, "property": {"table_id": "tbliPIl5lYefS4Nr", "multiple": false, "bidirectional": false}},
+      {"field_id": "fldCU7C9tM", "field_name": "26秋-安宁疗护-反馈问卷", "type": 21, "property": {"table_id": "tblp8GDapgvtG4wP", "multiple": true, "bidirectional": true, "bidirectional_link_field_id": "fldqWIBmIt"}},
+      {"field_id": "fld274kXMT", "field_name": "26秋-敬老院-反馈问卷 副本", "type": 21, "property": {"table_id": "tblNVIQJOZZHCaC8", "multiple": true, "bidirectional": true}},
+      {"field_id": "fldp8h9y1Y", "field_name": "26秋-护老周-反馈问卷", "type": 21, "property": {"table_id": "tbl3JwOI6k9XBFc1", "multiple": true, "bidirectional": true}},
+      {"field_id": "fldHmofEEm", "field_name": "26秋-心障关怀-反馈问卷", "type": 21, "property": {"table_id": "tblcaPosQ1bDsFbE", "multiple": true, "bidirectional": true}},
+      {"field_id": "fldOu161QP", "field_name": "26秋-儿童之家-反馈问卷", "type": 21, "property": {"table_id": "tblg0DncXoRDOP7A", "multiple": true, "bidirectional": true}},
+      {"field_id": "fldDnwTwml", "field_name": "26秋-某未开放表-反馈问卷", "type": 21, "property": {"table_id": "tblFAILcandidate001", "multiple": true, "bidirectional": true}}
+    ],
+    "tblp8GDapgvtG4wP": [
+      {"field_id": "fldA1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldA2", "field_name": "参与时间", "type": 5, "property": {"date_formatter": "yyyy/MM/dd"}},
+      {"field_id": "fldA3", "field_name": "志愿时长", "type": 2, "property": {"formatter": "0"}},
+      {"field_id": "fldA4", "field_name": "感想", "type": 1},
+      {"field_id": "fldA5", "field_name": "给参加这次活动的体验打个分吧！", "type": 2},
+      {"field_id": "fldA6", "field_name": "能否用于宣传", "type": 3, "property": {"options": [{"name": "可以"}]}},
+      {"field_id": "fldA7", "field_name": "自动编号", "type": 1005},
+      {"field_id": "fldqWIBmIt", "field_name": "社员档案", "type": 21, "property": {"table_id": "tbliPIl5lYefS4Nr", "multiple": true, "bidirectional": true, "bidirectional_link_field_id": "fldCU7C9tM"}}
+    ],
+    "tblNVIQJOZZHCaC8": [
+      {"field_id": "fldB1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldB2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldB3", "field_name": "志愿时长", "type": 2},
+      {"field_id": "fldB4", "field_name": "感想", "type": 1},
+      {"field_id": "fldB5", "field_name": "社员档案", "type": 21, "property": {"link_table": "tbliPIl5lYefS4Nr"}}
+    ],
+    "tbl3JwOI6k9XBFc1": [
+      {"field_id": "fldC1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldC2", "field_name": "活动时间", "type": 5},
+      {"field_id": "fldC3", "field_name": "志愿时长", "type": 2},
+      {"field_id": "fldC4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tbliPIl5lYefS4Nr"}}
+    ],
+    "tbl6CT22uQUGe7gV": [
+      {"field_id": "fldD1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldD2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldD3", "field_name": "志愿时长", "type": 2},
+      {"field_id": "fldD4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tbliPIl5lYefS4Nr"}}
+    ],
+    "tblcaPosQ1bDsFbE": [
+      {"field_id": "fldE1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldE2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldE3", "field_name": "志愿时长", "type": 2},
+      {"field_id": "fldE4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tbliPIl5lYefS4Nr"}}
+    ],
+    "tblg0DncXoRDOP7A": [
+      {"field_id": "fldF1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldF2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldF3", "field_name": "志愿时长", "type": 2},
+      {"field_id": "fldF4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tbliPIl5lYefS4Nr"}}
+    ],
+    "tbl4GS1kFZLpv6t6": [
+      {"field_id": "fldG1", "field_name": "提出建议", "type": 1, "is_primary": true},
+      {"field_id": "fldG2", "field_name": "联系方式", "type": 1}
+    ],
+    "tblI5dedmB7cuNJy": [
+      {"field_id": "fldH1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldH2", "field_name": "志愿时长", "type": 2}
+    ],
+    "tbltKlVDkFs1JLHB": [
+      {"field_id": "fldI1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldI2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldI3", "field_name": "志愿学时", "type": 2},
+      {"field_id": "fldI4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tbliPIl5lYefS4Nr"}}
+    ]
+  },
+  "NPcMbmMI6a06jmsaXoscwLcqnBf": {
+    "tblE5QYLVyf7YBmE": [
+      {"field_id": "fldHPOgSx9", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldSID25", "field_name": "学号", "type": 2},
+      {"field_id": "fldkUZofYx", "field_name": "性别", "type": 3},
+      {"field_id": "fldVFtc1Rw", "field_name": "年级", "type": 3},
+      {"field_id": "fldv5lbZCZ", "field_name": "入社日期", "type": 5, "property": {"date_formatter": "yyyy/MM/dd", "auto_fill": false}},
+      {"field_id": "fldWX26", "field_name": "您的微信号", "type": 1},
+      {"field_id": "fldF9kByGa", "field_name": "2025秋金盲杖", "type": 21, "property": {"table_id": "tblB74WxX7708aKd", "multiple": true, "bidirectional": true}},
+      {"field_id": "fldZv", "field_name": "2025秋扫雪", "type": 21, "property": {"table_id": "tblzVoQoJQUAbjLi", "multiple": true, "bidirectional": true}},
+      {"field_id": "fldLWRnZmv", "field_name": "2025秋社办整理", "type": 21, "property": {"table_id": "tblLhFZDP3Smm6j2", "multiple": true, "bidirectional": true}}
+    ],
+    "tblB74WxX7708aKd": [
+      {"field_id": "fldJ1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldJ2", "field_name": "学号", "type": 2},
+      {"field_id": "fldJ3", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldJ4", "field_name": "志愿学时", "type": 2},
+      {"field_id": "fldJ5", "field_name": "社员档案", "type": 21, "property": {"table_id": "tblE5QYLVyf7YBmE"}}
+    ],
+    "tblzVoQoJQUAbjLi": [
+      {"field_id": "fldK1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldK2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldK3", "field_name": "志愿时长", "type": 2},
+      {"field_id": "fldK4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tblE5QYLVyf7YBmE"}}
+    ],
+    "tbl2vLt6URHr731c": [
+      {"field_id": "fldL1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldL2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldL3", "field_name": "志愿学时", "type": 2},
+      {"field_id": "fldL4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tblE5QYLVyf7YBmE"}}
+    ],
+    "tbllVcpcRyMkKsRP": [
+      {"field_id": "fldM1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldM2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldM3", "field_name": "志愿时长", "type": 2},
+      {"field_id": "fldM4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tblE5QYLVyf7YBmE"}}
+    ],
+    "tblD1VlzTQSlPDM2": [
+      {"field_id": "fldN1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldN2", "field_name": "年级", "type": 3},
+      {"field_id": "fldN3", "field_name": "备注", "type": 1}
+    ],
+    "tblhnwSMlvHsm5RE": [
+      {"field_id": "fldO1", "field_name": "姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldO2", "field_name": "参与时间", "type": 5},
+      {"field_id": "fldO3", "field_name": "志愿时长", "type": 2},
+      {"field_id": "fldO4", "field_name": "社员档案", "type": 21, "property": {"table_id": "tblE5QYLVyf7YBmE"}}
+    ],
+    "tbleCOz8lHcOHXvs": [
+      {"field_id": "fldP1", "field_name": "您的姓名", "type": 1, "is_primary": true},
+      {"field_id": "fldP2", "field_name": "您的身份证", "type": 1},
+      {"field_id": "fldP3", "field_name": "您在志愿北京的志愿者编号", "type": 2}
+    ]
+  }
+}

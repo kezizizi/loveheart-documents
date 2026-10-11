@@ -1,0 +1,37 @@
+{
+  "P0lpbqm44a21zKswi6tcbEj2nHc": [
+    {"id": "tbliPIl5lYefS4Nr", "name": "社员档案", "parent_id": null, "type": "table", "records_count": 1134},
+    {"id": "tbl4GS1kFZLpv6t6", "name": "爱心社意见反馈渠道", "parent_id": null, "type": "table", "records_count": 0},
+    {"id": "tblI5dedmB7cuNJy", "name": "【模板】26秋-活动名-反馈问卷", "parent_id": null, "type": "table", "records_count": 0},
+    {"id": "tbltKlVDkFs1JLHB", "name": "26秋-日常工作-学时问卷", "parent_id": null, "type": "table", "records_count": 4},
+    {"id": "bfl5FRqq2Cqlq3lv", "name": "护老部", "parent_id": null, "type": "folder"},
+    {"id": "tblp8GDapgvtG4wP", "name": "26秋-安宁疗护-反馈问卷", "parent_id": "bfl5FRqq2Cqlq3lv", "type": "table", "records_count": 10},
+    {"id": "tblNVIQJOZZHCaC8", "name": "26秋-敬老院-反馈问卷", "parent_id": "bfl5FRqq2Cqlq3lv", "type": "table", "records_count": 15},
+    {"id": "tbl3JwOI6k9XBFc1", "name": "26秋-护老周-反馈问卷", "parent_id": "bfl5FRqq2Cqlq3lv", "type": "table", "records_count": 0},
+    {"id": "bfl2L9wmXAuyrZsC", "name": "无障碍部", "parent_id": null, "type": "folder"},
+    {"id": "tbl6CT22uQUGe7gV", "name": "26秋-守望星空夏令营影展-反馈问卷", "parent_id": "bfl2L9wmXAuyrZsC", "type": "table", "records_count": 34},
+    {"id": "tblcaPosQ1bDsFbE", "name": "26秋-心障关怀-反馈问卷", "parent_id": "bflRG8c3Il9jlMLS", "type": "table", "records_count": 0},
+    {"id": "bflRG8c3Il9jlMLS", "name": "儿童部", "parent_id": null, "type": "folder"},
+    {"id": "tblFAILcandidate001", "name": "26秋-某未开放表-反馈问卷", "parent_id": "bflRG8c3Il9jlMLS", "type": "table", "records_count": null},
+    {"id": "blkf4MLoZ8ghaX11", "name": "26秋招新数据", "parent_id": null, "type": "dashboard"}
+  ],
+  "NPcMbmMI6a06jmsaXoscwLcqnBf": [
+    {"id": "tblE5QYLVyf7YBmE", "name": "社员档案", "parent_id": null, "type": "table", "records_count": 2488},
+    {"id": "tbleCOz8lHcOHXvs", "name": "志愿者编号信息统计", "parent_id": null, "type": "table", "records_count": 1398},
+    {"id": "tblt9xwIUzaSXn82", "name": "2026春活动名反馈、学时问卷（模板勿用）", "parent_id": null, "type": "table", "records_count": 0},
+    {"id": "bflYPgj2PbBrpu4D", "name": "资助部", "parent_id": null, "type": "folder"},
+    {"id": "bflY6yIgcLIFw6LY", "name": "2025秋", "parent_id": "bflYPgj2PbBrpu4D", "type": "folder"},
+    {"id": "tbl2vLt6URHr731c", "name": "2025秋资助部日常工作", "parent_id": "bflY6yIgcLIFw6LY", "type": "table", "records_count": 27},
+    {"id": "bfl3ekww5iSvJiX6", "name": "无障碍部", "parent_id": null, "type": "folder"},
+    {"id": "bflYVs1A38krAcAF", "name": "25秋", "parent_id": "bfl3ekww5iSvJiX6", "type": "folder"},
+    {"id": "tblB74WxX7708aKd", "name": "2025秋金盲杖反馈、学时问卷", "parent_id": "bflYVs1A38krAcAF", "type": "table", "records_count": 74},
+    {"id": "bflwbR9hH0ariogB", "name": "组织部", "parent_id": null, "type": "folder"},
+    {"id": "bfloVS3qqDDXoCea", "name": "组织部25秋", "parent_id": "bflwbR9hH0ariogB", "type": "folder"},
+    {"id": "tblzVoQoJQUAbjLi", "name": "2025秋扫雪", "parent_id": "bfloVS3qqDDXoCea", "type": "table", "records_count": 12},
+    {"id": "tbllVcpcRyMkKsRP", "name": "2025秋爱心驿站系列栏目制作反馈、学时问卷", "parent_id": "bfloVS3qqDDXoCea", "type": "table", "records_count": 14},
+    {"id": "tblD1VlzTQSlPDM2", "name": "2025-2026项目组人员名单", "parent_id": "bflEA6UJ9Vwnsy5T", "type": "table", "records_count": 25},
+    {"id": "bflEA6UJ9Vwnsy5T", "name": "项目组", "parent_id": null, "type": "folder"},
+    {"id": "bflT95XodDM0ZS7i", "name": "1+n第二期", "parent_id": null, "type": "folder"},
+    {"id": "tblhnwSMlvHsm5RE", "name": "1+n第二期匹配", "parent_id": "bflT95XodDM0ZS7i", "type": "table", "records_count": 32}
+  ]
+}

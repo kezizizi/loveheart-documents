@@ -1,0 +1,40 @@
+# ---- 密钥：绝对不能入库 ----
+.streamlit/secrets.toml
+.streamlit/*.log
+.env
+.env.*
+
+# ---- WorkBuddy 工作目录 ----
+.workbuddy/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+
+# ---- 测试与工具缓存 ----
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 临时产物 ----
+*.tmp
+/tmp/
