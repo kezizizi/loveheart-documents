@@ -144,6 +144,10 @@ class FeishuHttpClient:
 
         # None = 尚未探测；3 / 1 = 已确定可用的接口版本
         self._api_version: int | None = None
+        # 是否因为缺少 base:block:read 而降级成「扁平表列表」
+        self.blocks_degraded = False
+        # 记录每次请求实际投影的字段名，供隐私自检与回归测试断言
+        self.projections: list[tuple[str, str, tuple[str, ...]]] = []
 
     # ---------------------------------------------------------------- 认证
 
@@ -285,20 +289,83 @@ class FeishuHttpClient:
         parent_id: str | None = None,
         block_type: str | None = None,
     ) -> list[dict[str, Any]]:
+        """列出 Block（含文件夹）。
+
+        新版 ``base/v3/blocks/list`` 需要 ``base:block:read`` 权限。该权限是
+        旧版接口**没有对应能力**的唯一一项（文件夹层级只存在于新版接口），
+        因此拿不到时会降级成「用旧版列出全部表」，此时所有表都在根层，
+        部组归属会退化为「其他」。
+        """
         body: dict[str, Any] = {}
         if parent_id:
             body["parent_id"] = parent_id
         if block_type:
             body["type"] = block_type
 
-        data = self._request(
-            "POST", f"/base/v3/bases/{base_token}/blocks/list", json_body=body
-        )
+        try:
+            data = self._request(
+                "POST", f"/base/v3/bases/{base_token}/blocks/list", json_body=body
+            )
+        except FeishuError as exc:
+            if not self._can_fall_back_to_table_list(exc):
+                raise
+            return self._list_tables_as_blocks(base_token, block_type=block_type)
+
         return S.normalize_blocks(data)
+
+    @staticmethod
+    def _can_fall_back_to_table_list(exc: FeishuError) -> bool:
+        """只有「新版接口不通」类的错误才降级，真正的业务错误照抛。"""
+        if exc.code in _FALLBACK_CODES:
+            return True
+        return exc.status in _FALLBACK_STATUS
+
+    def _list_tables_as_blocks(
+        self, base_token: str, *, block_type: str | None = None
+    ) -> list[dict[str, Any]]:
+        """降级路径：用旧版「列出所有表」拼一个扁平的 block 列表。
+
+        返回的每一项 ``parent_id`` 都是 ``None``，即所有表都在根层，
+        因此无法推导部组。调用方应据此提示用户补权限。
+        """
+        if block_type and block_type != "table":
+            return []
+
+        self.blocks_degraded = True
+        blocks: list[dict[str, Any]] = []
+        page_token = ""
+        while True:
+            params: dict[str, Any] = {"page_size": 100}
+            if page_token:
+                params["page_token"] = page_token
+            data = self._request(
+                "GET", f"/bitable/v1/apps/{base_token}/tables", params=params
+            )
+            for item in data.get("items") or []:
+                table_id = item.get("table_id") or item.get("id")
+                if not table_id:
+                    continue
+                blocks.append(
+                    {
+                        "id": table_id,
+                        "type": "table",
+                        "name": item.get("name") or "",
+                        "parent_id": None,
+                        "records_count": None,
+                    }
+                )
+            if not data.get("has_more"):
+                break
+            page_token = data.get("page_token") or ""
+            if not page_token:
+                break
+        return blocks
 
     # ---------------------------------------------------------------- Field
 
     def list_fields(self, base_token: str, table_id: str) -> list[dict[str, Any]]:
+        self.projections.append(("list_fields", table_id, ()))
+
         def _v3() -> dict[str, Any]:
             out: list[dict[str, Any]] = []
             offset = 0
@@ -357,6 +424,7 @@ class FeishuHttpClient:
     ) -> list[dict[str, Any]]:
         allow = list(field_names) if field_names else None
         assert_names_allowed(allow)
+        self.projections.append(("search_records", table_id, tuple(allow or ())))
 
         def _payload(offset: int) -> dict[str, Any]:
             body: dict[str, Any] = {"limit": limit, "offset": offset}
@@ -390,15 +458,28 @@ class FeishuHttpClient:
                     break
             return {"items": out}
 
-        def _v1() -> dict[str, Any]:
+        def _v1_filter() -> dict[str, Any] | None:
+            """旧版 search 接口**不认 keyword**（实测：传了也返回整表），
+            必须翻译成 filter 条件才能把筛选下推到服务端。"""
+            if not keyword or not search_fields:
+                return None
+            conditions = [
+                {"field_name": name, "operator": "contains", "value": [str(keyword)]}
+                for name in search_fields
+            ]
+            return {
+                "conjunction": "and" if len(conditions) == 1 else "or",
+                "conditions": conditions,
+            }
+
+        def _v1(use_filter: bool = True) -> dict[str, Any]:
             out: list[dict[str, Any]] = []
             page_token = ""
             while True:
                 body: dict[str, Any] = {}
-                if keyword:
-                    body["keyword"] = keyword
-                if search_fields:
-                    body["search_fields"] = list(search_fields)
+                condition = _v1_filter() if use_filter else None
+                if condition:
+                    body["filter"] = condition
                 if allow:
                     body["field_names"] = allow
                 if automatic_fields:
@@ -421,7 +502,16 @@ class FeishuHttpClient:
                     break
             return {"items": out}
 
-        data = self._try_v3_then_v1(_v3, _v1)
+        def _v1_safe() -> dict[str, Any]:
+            """filter 不被支持时退回「全量拉取 + 客户端筛」，保证不炸。"""
+            try:
+                return _v1(use_filter=True)
+            except FeishuError:
+                if not keyword:
+                    raise
+                return _v1(use_filter=False)
+
+        data = self._try_v3_then_v1(_v3, _v1_safe)
         return S.normalize_records(data.get("items") or data)
 
     def batch_get_records(
@@ -434,22 +524,43 @@ class FeishuHttpClient:
     ) -> list[dict[str, Any]]:
         allow = list(field_names) if field_names else None
         assert_names_allowed(allow)
+        self.projections.append(("batch_get_records", table_id, tuple(allow or ())))
         ids = [r for r in record_ids if r]
         if not ids:
             return []
 
-        out: list[dict[str, Any]] = []
-        for chunk in _chunks(ids, 100):
-            body: dict[str, Any] = {"record_ids": list(chunk)}
-            if allow:
-                body["field_names"] = allow
-            data = self._request(
-                "POST",
-                f"/base/v3/bases/{base_token}/tables/{table_id}/records/batch_get",
-                json_body=body,
-            )
-            out.extend(data.get("records") or data.get("items") or [])
-        return S.normalize_records(out)
+        def _v3() -> dict[str, Any]:
+            out: list[dict[str, Any]] = []
+            for chunk in _chunks(ids, 100):
+                body: dict[str, Any] = {"record_ids": list(chunk)}
+                if allow:
+                    body["field_names"] = allow
+                data = self._request(
+                    "POST",
+                    f"/base/v3/bases/{base_token}/tables/{table_id}/records/batch_get",
+                    json_body=body,
+                )
+                out.extend(data.get("records") or data.get("items") or [])
+            return {"items": out}
+
+        def _v1() -> dict[str, Any]:
+            out: list[dict[str, Any]] = []
+            for chunk in _chunks(ids, 100):
+                body: dict[str, Any] = {"record_ids": list(chunk)}
+                if allow:
+                    body["field_names"] = allow
+                data = self._request(
+                    "POST",
+                    f"/bitable/v1/apps/{base_token}/tables/{table_id}/records/batch_get",
+                    json_body=body,
+                )
+                out.extend(data.get("items") or data.get("records") or [])
+            return {"items": out}
+
+        # ⚠️ 这条回退是必须的：新版 batch_get 需要 base:record:read，
+        # 一旦缺失又不回退，「关联快通道」会整体失效、把所有活动漏掉。
+        data = self._try_v3_then_v1(_v3, _v1)
+        return S.normalize_records(data.get("items") or data)
 
 
 # --------------------------------------------------------------------------

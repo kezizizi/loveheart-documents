@@ -1,26 +1,38 @@
 /* ==========================================================================
-   爱心社「爱心足迹」· 暖阳爱心风样式表
-   品牌：双心描边正红 #E02B20 + 暖橙 #FF8A3D + 米白 #FFF8F0
+   爱心社「爱心足迹」· 样式表
+   配色：栏图深红 #81021F 为品牌色；其余中性色与点缀色取配色卡
+        （Morandi 低饱和：蓝 #99CDD8 / 雾 #D6E4E3 / 藕 #F3D9D3 /
+          珊瑚 #F3B2B2 / 灰 #D9D6D3 / 鼠尾草 #657166）
    ========================================================================== */
 
 :root {
-  --ax-red: #E02B20;
-  --ax-red-soft: #FF6B5A;
-  --ax-orange: #FF8A3D;
-  --ax-amber: #F5A623;
-  --ax-yellow: #FFD166;
-  --ax-pink: #FFB4A2;
-  --ax-cream: #FFF8F0;
+  /* 品牌 */
+  --ax-crimson: #81021F;
+  --ax-crimson-deep: #5E0116;
+  --ax-cream: #F9F6E5;
+
+  /* 配色卡 */
+  --ax-blue: #99CDD8;
+  --ax-mist: #D6E4E3;
+  --ax-blush: #F3D9D3;
+  --ax-coral: #F3B2B2;
+  --ax-grey: #D9D6D3;
+  --ax-sage: #657166;
+
+  /* 界面 */
+  --ax-bg: #FAFAF8;
   --ax-card: #FFFFFF;
-  --ax-line: #F2E2D6;
-  --ax-ink: #3D2B1F;
-  --ax-ink-soft: #7A6A5C;
-  --ax-ink-faint: #A89789;
-  --ax-gradient: linear-gradient(135deg, #FF8A3D 0%, #E02B20 100%);
+  --ax-tint: #F4F5F1;
+  --ax-line: #E7E5DF;
+  --ax-line-soft: #F0EFEA;
+  --ax-ink: #2F332C;
+  --ax-ink-soft: #75796F;
+  --ax-ink-faint: #A6AAA0;
+
   --ax-radius: 20px;
   --ax-radius-sm: 14px;
-  --ax-shadow: 0 8px 30px rgba(224, 43, 32, 0.08);
-  --ax-shadow-lift: 0 14px 40px rgba(224, 43, 32, 0.14);
+  --ax-shadow: 0 6px 24px rgba(47, 51, 44, 0.055);
+  --ax-shadow-lift: 0 14px 38px rgba(129, 2, 31, 0.16);
   --ax-font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
     "Source Han Sans SC", "Noto Sans SC", -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -29,7 +41,7 @@
 /* ---------- 页面底 ---------- */
 .stApp,
 [data-testid="stAppViewContainer"] {
-  background: var(--ax-cream);
+  background: var(--ax-bg);
   font-family: var(--ax-font);
   color: var(--ax-ink);
 }
@@ -46,7 +58,7 @@ footer,
 }
 
 .block-container {
-  padding-top: 2.4rem;
+  padding-top: 2.2rem;
   padding-bottom: 3rem;
   max-width: 780px;
 }
@@ -55,92 +67,44 @@ h1, h2, h3, h4, p, span, div, label {
   font-family: var(--ax-font);
 }
 
-/* ---------- 顶部品牌区 ---------- */
+/* ---------- 顶部品牌区：栏图 + 深红标题带 ---------- */
 .ax-hero {
-  position: relative;
-  border-radius: 26px;
-  padding: 34px 30px 30px;
-  background: var(--ax-gradient);
-  color: #fff;
-  box-shadow: var(--ax-shadow-lift);
+  border-radius: 24px;
   overflow: hidden;
-  margin-bottom: 26px;
+  box-shadow: var(--ax-shadow-lift);
+  margin-bottom: 24px;
+  background: var(--ax-crimson);
+  animation: ax-rise 0.5s ease both;
 }
 
-.ax-hero::after {
-  content: "";
-  position: absolute;
-  right: -60px;
-  bottom: -80px;
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.10);
+.ax-hero-banner {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
-.ax-hero-logo {
-  width: 62px;
-  height: 62px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.94);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-  box-shadow: 0 6px 18px rgba(120, 20, 10, 0.18);
-}
-
-.ax-hero-logo img {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
+.ax-hero-band {
+  padding: 20px 28px 24px;
+  background: var(--ax-crimson);
+  text-align: center;
 }
 
 .ax-hero-title {
   font-size: 30px;
   font-weight: 600;
-  letter-spacing: 0.5px;
+  letter-spacing: 3px;
+  color: var(--ax-cream);
   margin: 0 0 8px;
 }
 
 .ax-hero-sub {
-  font-size: 14px;
-  line-height: 1.7;
-  color: rgba(255, 255, 255, 0.92);
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: #D8CDA8;
   margin: 0;
 }
 
-.ax-hero-slogan {
-  margin-top: 18px;
-  font-size: 13px;
-  letter-spacing: 2px;
-  color: rgba(255, 255, 255, 0.82);
-}
-
 /* ---------- 查询卡 ---------- */
-.ax-panel {
-  background: var(--ax-card);
-  border: 1px solid var(--ax-line);
-  border-radius: var(--ax-radius);
-  padding: 22px 22px 8px;
-  box-shadow: var(--ax-shadow);
-  margin-bottom: 22px;
-}
-
-.ax-panel-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ax-ink);
-  margin: 0 0 4px;
-}
-
-.ax-panel-hint {
-  font-size: 12.5px;
-  color: var(--ax-ink-soft);
-  margin: 0 0 12px;
-}
-
-/* 用 st.container(key=...) 包住原生控件时的卡片外观 */
 .st-key-ax-query-panel,
 .st-key-ax-partners-box,
 .st-key-ax-export-box {
@@ -157,11 +121,24 @@ h1, h2, h3, h4, p, span, div, label {
   margin-bottom: 14px;
 }
 
+.ax-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ax-ink);
+  margin: 0 0 4px;
+}
+
+.ax-panel-hint {
+  font-size: 12.5px;
+  color: var(--ax-ink-soft);
+  margin: 0 0 12px;
+}
+
 /* ---------- 输入框 / 按钮 ---------- */
 [data-testid="stTextInput"] input {
   border-radius: var(--ax-radius-sm) !important;
-  border: 2px solid var(--ax-line) !important;
-  background: #FFFDFB !important;
+  border: 1.5px solid var(--ax-line) !important;
+  background: #FCFCFB !important;
   padding: 12px 16px !important;
   font-size: 16px !important;
   color: var(--ax-ink) !important;
@@ -169,8 +146,8 @@ h1, h2, h3, h4, p, span, div, label {
 }
 
 [data-testid="stTextInput"] input:focus {
-  border-color: var(--ax-orange) !important;
-  box-shadow: 0 0 0 4px rgba(255, 138, 61, 0.16) !important;
+  border-color: var(--ax-crimson) !important;
+  box-shadow: 0 0 0 4px rgba(129, 2, 31, 0.10) !important;
 }
 
 [data-testid="stTextInput"] label p {
@@ -181,24 +158,24 @@ h1, h2, h3, h4, p, span, div, label {
 .stButton > button,
 [data-testid="stFormSubmitButton"] > button {
   width: 100%;
-  height: 54px;
+  height: 52px;
   border: none;
   border-radius: var(--ax-radius-sm);
-  background: var(--ax-gradient);
-  color: #fff;
-  font-size: 17px;
+  background: var(--ax-crimson);
+  color: var(--ax-cream);
+  font-size: 16.5px;
   font-weight: 600;
-  letter-spacing: 1px;
-  box-shadow: 0 8px 22px rgba(224, 43, 32, 0.24);
-  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+  letter-spacing: 2px;
+  box-shadow: 0 8px 20px rgba(129, 2, 31, 0.20);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
 .stButton > button:hover,
 [data-testid="stFormSubmitButton"] > button:hover {
+  background: var(--ax-crimson-deep);
   transform: translateY(-1px);
-  filter: brightness(1.04);
-  box-shadow: 0 12px 28px rgba(224, 43, 32, 0.30);
-  color: #fff;
+  box-shadow: 0 12px 26px rgba(129, 2, 31, 0.26);
+  color: var(--ax-cream);
 }
 
 .stButton > button:active {
@@ -209,46 +186,66 @@ h1, h2, h3, h4, p, span, div, label {
   width: 100%;
   height: 46px;
   border-radius: var(--ax-radius-sm);
-  border: 2px solid var(--ax-line);
+  border: 1.5px solid var(--ax-line);
   background: #fff;
   color: var(--ax-ink);
   font-size: 15px;
   font-weight: 500;
-  transition: border-color 0.16s ease, background 0.16s ease;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
 }
 
 .stDownloadButton > button:hover {
-  border-color: var(--ax-orange);
-  background: #FFF6EE;
-  color: var(--ax-red);
+  border-color: var(--ax-crimson);
+  background: #FCF6F7;
+  color: var(--ax-crimson);
 }
 
-/* ---------- 结果区：hero ---------- */
+/* 卡片内的次要操作：描边样式，把实心主按钮留给「生成我的爱心足迹」 */
+.st-key-ax-partners-box .stButton > button,
+.st-key-ax-export-box .stButton > button {
+  height: 46px;
+  background: #fff;
+  color: var(--ax-crimson);
+  border: 1.5px solid var(--ax-crimson);
+  box-shadow: none;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+.st-key-ax-partners-box .stButton > button:hover,
+.st-key-ax-export-box .stButton > button:hover {
+  background: #FCF6F7;
+  color: var(--ax-crimson-deep);
+  border-color: var(--ax-crimson-deep);
+  box-shadow: 0 8px 18px rgba(129, 2, 31, 0.10);
+}
+
+/* ---------- 结果区头 ---------- */
 .ax-result-hero {
-  border-radius: 26px;
-  padding: 26px 28px;
+  border-radius: var(--ax-radius);
+  padding: 22px 26px;
   background: var(--ax-card);
   border: 1px solid var(--ax-line);
   box-shadow: var(--ax-shadow);
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   animation: ax-rise 0.5s ease both;
 }
 
 .ax-result-name {
-  font-size: 26px;
+  font-size: 25px;
   font-weight: 600;
   color: var(--ax-ink);
-  margin: 0 0 6px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  margin: 0 0 8px;
+  border-left: 4px solid var(--ax-crimson);
+  padding-left: 12px;
+  line-height: 1.4;
 }
 
 .ax-result-meta {
   font-size: 13.5px;
   color: var(--ax-ink-soft);
-  line-height: 1.9;
+  line-height: 2;
 }
 
 /* ---------- 徽标 ---------- */
@@ -263,18 +260,18 @@ h1, h2, h3, h4, p, span, div, label {
 }
 
 .ax-badge-real {
-  background: #EAF7EE;
-  color: #1D7A3C;
+  background: #E9F0E6;
+  color: #4A6B3C;
 }
 
 .ax-badge-est {
-  background: #FFF4E0;
-  color: #9A6410;
+  background: #F5EEE0;
+  color: #8A6E2E;
 }
 
 .ax-badge-low {
-  background: #F3EEF9;
-  color: #6B4E9B;
+  background: #EFEDF4;
+  color: #625A7C;
 }
 
 /* ---------- 统计卡 ---------- */
@@ -282,7 +279,7 @@ h1, h2, h3, h4, p, span, div, label {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 
 .ax-stat {
@@ -302,10 +299,10 @@ h1, h2, h3, h4, p, span, div, label {
 }
 
 .ax-stat-value {
-  font-size: 34px;
+  font-size: 33px;
   font-weight: 700;
   line-height: 1;
-  color: var(--ax-red);
+  color: var(--ax-crimson);
 }
 
 .ax-stat-unit {
@@ -322,7 +319,7 @@ h1, h2, h3, h4, p, span, div, label {
   font-size: 16px;
   font-weight: 600;
   color: var(--ax-ink);
-  margin: 26px 0 14px;
+  margin: 24px 0 14px;
 }
 
 .ax-section::before {
@@ -330,7 +327,7 @@ h1, h2, h3, h4, p, span, div, label {
   width: 4px;
   height: 17px;
   border-radius: 3px;
-  background: var(--ax-gradient);
+  background: var(--ax-crimson);
 }
 
 .ax-section-note {
@@ -340,7 +337,7 @@ h1, h2, h3, h4, p, span, div, label {
   margin-left: 2px;
 }
 
-/* ---------- 部组色标 ---------- */
+/* ---------- 色标 ---------- */
 .ax-pills {
   display: flex;
   flex-wrap: wrap;
@@ -355,7 +352,7 @@ h1, h2, h3, h4, p, span, div, label {
   padding: 5px 13px;
   border-radius: 999px;
   font-size: 12.5px;
-  color: #4A3527;
+  color: #3C4038;
   font-weight: 500;
 }
 
@@ -375,11 +372,11 @@ h1, h2, h3, h4, p, span, div, label {
   content: "";
   position: absolute;
   left: 7px;
-  top: 10px;
-  bottom: 10px;
+  top: 12px;
+  bottom: 12px;
   width: 2px;
   border-radius: 2px;
-  background: linear-gradient(180deg, #FFD9C4 0%, #FFF0E4 100%);
+  background: linear-gradient(180deg, #E3DFD5 0%, #F4F2EC 100%);
 }
 
 .ax-tl-item {
@@ -396,23 +393,23 @@ h1, h2, h3, h4, p, span, div, label {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 3px solid var(--ax-cream);
-  box-shadow: 0 0 0 1.5px rgba(224, 43, 32, 0.10);
+  border: 3px solid var(--ax-bg);
+  box-shadow: 0 0 0 1.5px rgba(47, 51, 44, 0.06);
 }
 
 .ax-tl-card {
   background: var(--ax-card);
   border: 1px solid var(--ax-line);
-  border-radius: 16px;
+  border-radius: 15px;
   padding: 14px 16px;
-  box-shadow: 0 4px 16px rgba(224, 43, 32, 0.05);
+  box-shadow: 0 3px 14px rgba(47, 51, 44, 0.04);
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
 .ax-tl-card:hover {
   transform: translateX(3px);
-  border-color: #F6D7C4;
-  box-shadow: 0 10px 26px rgba(224, 43, 32, 0.10);
+  border-color: #DCD8CC;
+  box-shadow: 0 10px 24px rgba(47, 51, 44, 0.08);
 }
 
 .ax-tl-head {
@@ -432,7 +429,7 @@ h1, h2, h3, h4, p, span, div, label {
 .ax-tl-hours {
   font-size: 15px;
   font-weight: 700;
-  color: var(--ax-red);
+  color: var(--ax-crimson);
   white-space: nowrap;
 }
 
@@ -449,8 +446,8 @@ h1, h2, h3, h4, p, span, div, label {
 .ax-tl-note {
   margin-top: 9px;
   padding: 9px 12px;
-  border-left: 3px solid #FFD9C4;
-  background: #FFFBF7;
+  border-left: 3px solid var(--ax-blush);
+  background: #FBF9F6;
   border-radius: 0 10px 10px 0;
   font-size: 13px;
   line-height: 1.75;
@@ -474,7 +471,7 @@ h1, h2, h3, h4, p, span, div, label {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 10px 30px rgba(224, 43, 32, 0.16);
+  box-shadow: 0 10px 28px rgba(129, 2, 31, 0.14);
   animation: ax-heartbeat 1.15s ease-in-out infinite;
 }
 
@@ -498,7 +495,7 @@ h1, h2, h3, h4, p, span, div, label {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ax-orange);
+  background: var(--ax-coral);
   animation: ax-bounce 1.1s ease-in-out infinite;
 }
 
@@ -518,26 +515,26 @@ h1, h2, h3, h4, p, span, div, label {
 }
 
 .ax-note-info {
-  background: #FFF6EE;
-  border: 1px solid #FFE0C9;
-  color: #8A5A1F;
+  background: #F1F6F6;
+  border: 1px solid #DCE9E8;
+  color: #46605C;
 }
 
 .ax-note-warn {
-  background: #FFF9E8;
-  border: 1px solid #FFE7AE;
-  color: #8A6410;
+  background: #F8F3E8;
+  border: 1px solid #EDE2C6;
+  color: #7C6526;
 }
 
 .ax-note-error {
-  background: #FDEDEC;
-  border: 1px solid #F8CFCB;
-  color: #9B2C22;
+  background: #FAF0F1;
+  border: 1px solid #EFD6DA;
+  color: #8E2036;
 }
 
 .ax-note-empty {
   background: var(--ax-card);
-  border: 1px dashed #F0DACB;
+  border: 1px dashed #E2DFD6;
   color: var(--ax-ink-soft);
   text-align: center;
   justify-content: center;
@@ -545,20 +542,20 @@ h1, h2, h3, h4, p, span, div, label {
 }
 
 .ax-note a {
-  color: var(--ax-red);
+  color: var(--ax-crimson);
   text-decoration: underline;
 }
 
 /* ---------- 侧边栏 ---------- */
 [data-testid="stSidebar"] {
-  background: #FFFCF9;
+  background: #FCFCFA;
   border-right: 1px solid var(--ax-line);
 }
 
 [data-testid="stSidebar"] .ax-side-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--ax-ink);
+  color: var(--ax-crimson);
   margin: 18px 0 8px;
 }
 
@@ -596,7 +593,7 @@ h1, h2, h3, h4, p, span, div, label {
 }
 
 [data-testid="stProgress"] > div > div > div {
-  background: var(--ax-gradient);
+  background: var(--ax-crimson);
 }
 
 .ax-footnote {
@@ -635,6 +632,7 @@ h1, h2, h3, h4, p, span, div, label {
 @media (prefers-reduced-motion: reduce) {
   .ax-stat,
   .ax-tl-item,
+  .ax-hero,
   .ax-result-hero,
   .ax-loading-heart,
   .ax-loading-trail span {
@@ -648,6 +646,10 @@ h1, h2, h3, h4, p, span, div, label {
     grid-template-columns: 1fr;
   }
   .ax-hero-title {
-    font-size: 24px;
+    font-size: 23px;
+    letter-spacing: 1px;
+  }
+  .ax-hero-band {
+    padding: 16px 18px 20px;
   }
 }

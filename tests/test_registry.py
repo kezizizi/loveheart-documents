@@ -280,3 +280,73 @@ def test_registry_main_link_index_pairs_field_to_table(specs):
 
     assert index["26秋-安宁疗护-反馈问卷"] == "tblp8GDapgvtG4wP"
     assert "父记录" not in index
+
+
+# --------------------------------------------------------------------------
+# 字段探测：真实数据里踩到的坑
+# --------------------------------------------------------------------------
+
+
+def test_detect_time_field_accepts_date_wording():
+    """真实活动表里参与时间字段叫「填写日期」，不是「时间」。"""
+    from feishu import schema as S
+    from feishu.registry import detect_time_fields
+
+    fields = S.normalize_fields(
+        [
+            {"field_id": "f1", "field_name": "填写日期", "type": 5},
+            {"field_id": "f2", "field_name": "参与时间", "type": 5},
+            {"field_id": "f3", "field_name": "志愿学时", "type": 2},
+            {"field_id": "f4", "field_name": "姓名", "type": 1},
+            {"field_id": "f5", "field_name": "签到时刻", "type": 5},
+        ]
+    )
+    times = detect_time_fields(fields)
+
+    assert set(times) == {"填写日期", "参与时间"}, "「日期」口径必须被识别"
+    assert times[0] == "参与时间", "强提示名称应排前面"
+
+
+def test_hours_field_ignores_text_and_formula_columns():
+    """「学时录入情况备注」是文本、「志愿学时录入公式」是公式，都不能算学时。"""
+    from feishu import schema as S
+    from feishu.registry import detect_hours_fields
+
+    fields = S.normalize_fields(
+        [
+            {"field_id": "f1", "field_name": "志愿学时", "type": 2},
+            {"field_id": "f2", "field_name": "学时录入情况备注", "type": 1},
+            {"field_id": "f3", "field_name": "志愿学时录入公式", "type": 20},
+            {"field_id": "f4", "field_name": "学号", "type": 2},
+        ]
+    )
+    assert detect_hours_fields(fields) == ("志愿学时",)
+
+
+def test_sensitive_fields_excluded_from_safe_projection(specs):
+    """活动表里真的有「身份证号」列，必须被挡在投影之外。"""
+    from feishu import schema as S
+    from feishu.registry import _probe_one
+    from config import SENSITIVE_FIELDS
+
+    spec = next(s for s in specs if s.key == "base_25_26")
+    block = {"id": "tblX", "name": "2025秋某活动", "type": "table", "parent_id": None}
+    client = build_fixture_client()
+    client.fields[(spec.base_token, "tblX")] = [
+        {"field_id": "f1", "field_name": "姓名", "type": 1},
+        {"field_id": "f2", "field_name": "身份证号", "type": 1},
+        {"field_id": "f3", "field_name": "您的微信号", "type": 1},
+        {"field_id": "f4", "field_name": "志愿学时", "type": 2},
+        {
+            "field_id": "f5",
+            "field_name": "社员档案",
+            "type": 21,
+            "property": {"table_id": spec.main_table_id},
+        },
+    ]
+
+    table = _probe_one(client, spec, block, {"tblX": block}, {})
+    assert table is not None
+    assert "姓名" in table.safe_fields
+    assert "志愿学时" in table.safe_fields
+    assert not (set(table.safe_fields) & SENSITIVE_FIELDS)

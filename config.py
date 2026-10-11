@@ -42,31 +42,40 @@ SUPPLEMENT_FORM_URL: Final = (
     "https://acngyried1he.feishu.cn/share/base/form/shrcnsgqhMNq6pJ43llUQ7M7rgg"
 )
 
-BRAND_RED: Final = "#E02B20"
-SUN_ORANGE: Final = "#FF8A3D"
-AMBER: Final = "#F5A623"
-WARM_YELLOW: Final = "#FFD166"
-CREAM: Final = "#FFF8F0"
-CARD_WHITE: Final = "#FFFFFF"
-INK: Final = "#3D2B1F"
-INK_SOFT: Final = "#7A6A5C"
-PINK_SOFT: Final = "#FFB4A2"
+BRAND_CRIMSON: Final = "#81021F"        # 栏图底色，主品牌色
+BRAND_CRIMSON_DEEP: Final = "#5E0116"   # 深一档，用于 hover / 渐变收尾
+CREAM_GOLD: Final = "#F9F6E5"           # 栏图上的奶油色，深底上的文字用它
 
-BRAND_GRADIENT: Final = f"linear-gradient(135deg,{SUN_ORANGE},{BRAND_RED})"
+# 配色卡（Morandi 低饱和）——全站中性色与点缀色都从这里取
+PALETTE_BLUE: Final = "#99CDD8"
+PALETTE_MIST: Final = "#D6E4E3"
+PALETTE_BLUSH: Final = "#F3D9D3"
+PALETTE_CORAL: Final = "#F3B2B2"
+PALETTE_GREY: Final = "#D9D6D3"
+PALETTE_SAGE: Final = "#657166"
 
-# 部组配色（与飞书 Base 里的 9 大部组一一对应）
+# 界面中性色
+SURFACE_BG: Final = "#FAFAF8"
+SURFACE_CARD: Final = "#FFFFFF"
+SURFACE_LINE: Final = "#E7E5DF"
+SURFACE_TINT: Final = "#F4F5F1"
+INK: Final = "#2F332C"
+INK_SOFT: Final = "#75796F"
+INK_FAINT: Final = "#A6AAA0"
+
+# 部组配色：沿用「低饱和、中明度」的调性，与配色卡同族
 GROUP_COLORS: Final[dict[str, str]] = {
-    "儿童部": "#F6A5A5",
-    "护老部": "#F7B267",
-    "手语分社": "#8ECAE6",
-    "外联部": "#A0C4FF",
-    "无障碍部": "#B5E48C",
-    "项目组": "#CDB4DB",
-    "宣传部": "#FFC6FF",
-    "资助部": "#9AD1D4",
-    "组织部": "#FFAFCC",
+    "儿童部": "#F3B2B2",
+    "护老部": "#E8B48A",
+    "手语分社": "#99CDD8",
+    "外联部": "#8FB4C9",
+    "无障碍部": "#A9C79E",
+    "项目组": "#B9AECB",
+    "宣传部": "#E7C3BC",
+    "资助部": "#8FBDB6",
+    "组织部": "#C7B79E",
 }
-GROUP_FALLBACK_COLOR: Final = "#D9CFC4"
+GROUP_FALLBACK_COLOR: Final = "#CFCEC7"
 UNKNOWN_GROUP_LABEL: Final = "其他"
 
 # --------------------------------------------------------------------------
@@ -269,10 +278,22 @@ def clean_activity_name(raw_name: str) -> str:
 # --------------------------------------------------------------------------
 
 HOURS_RE: Final = re.compile(r"(志愿)?(时长|学时|小时|工时)")
-TIME_RE: Final = re.compile(r"(参与|活动|服务|填写)?时间")
+# 参与时间字段的命名很野：实际数据里既有「参与时间」，也有「填写日期」「签到时间」，
+# 所以「时间」和「日期」都要认。
+TIME_RE: Final = re.compile(r"(参与|活动|服务|填写|报名|签到|录入)?(时间|日期)")
 
-# 强烈暗示某字段是“参与时间”的关键词（优先级高于泛化的 TIME_RE）
-TIME_STRONG_HINTS: Final = ("参与时间", "活动时间", "服务时间", "活动日期", "参与日期", "日期")
+# 强烈暗示某字段是「参与时间」的关键词（优先级高于泛化的 TIME_RE）
+TIME_STRONG_HINTS: Final = (
+    "参与时间",
+    "活动时间",
+    "服务时间",
+    "签到时间",
+    "填写日期",
+    "参与日期",
+    "活动日期",
+    "日期",
+    "时间",
+)
 
 # --------------------------------------------------------------------------
 # 缓存与并发

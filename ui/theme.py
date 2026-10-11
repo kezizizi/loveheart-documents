@@ -12,6 +12,8 @@ from config import CSS_DIR, LOGO_DIR, MASCOT_DIR
 
 EMBLEM = "emblem_clean.png"
 EMBLEM_TEXT = "emblem_text.jpg"
+# 网页版栏图：由 docs/栏图.png 裁掉文字与二维码后压成 WebP（约 55 KB）
+BANNER = "banner_web.webp"
 
 
 @lru_cache(maxsize=4)
@@ -30,15 +32,24 @@ def _data_uri(path_str: str) -> str:
     if not path.exists():
         return ""
     suffix = path.suffix.lower().lstrip(".")
-    mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "svg": "svg+xml"}.get(
-        suffix, "png"
-    )
+    mime = {
+        "jpg": "jpeg",
+        "jpeg": "jpeg",
+        "png": "png",
+        "webp": "webp",
+        "svg": "svg+xml",
+    }.get(suffix, "png")
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:image/{mime};base64,{encoded}"
 
 
 def logo_uri(file_name: str = EMBLEM) -> str:
     return _data_uri(str(LOGO_DIR / file_name))
+
+
+def banner_uri() -> str:
+    """顶部品牌带用的栏图。"""
+    return _data_uri(str(LOGO_DIR / BANNER)) or _data_uri(str(LOGO_DIR / "banner_band.png"))
 
 
 def mascot_uri(index: int = 0) -> str:

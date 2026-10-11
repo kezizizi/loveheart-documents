@@ -137,6 +137,7 @@ def test_retry_respects_retry_after_header():
 
 
 def test_403_is_not_retried():
+    """权限错误不重试。会换接口降级，但对同一个端点只打一次。"""
     state = {"n": 0}
 
     def handler(method: str, url: str, kwargs: dict):
@@ -145,17 +146,82 @@ def test_403_is_not_retried():
         state["n"] += 1
         return FakeResponse(403, {"code": 99991663, "msg": "forbidden"})
 
-    client = make_client(RecordingSession(handler=handler))
+    session = RecordingSession(handler=handler)
+    client = make_client(session)
 
     with pytest.raises(FeishuError):
         client.list_blocks(BASE)
 
-    assert state["n"] == 1, "权限错误不应重试"
+    assert session.count(contains="blocks/list") == 1, "权限错误不应重试同一条请求"
+
+
+def test_blocks_fall_back_to_flat_table_list_when_scope_missing():
+    """缺少 base:block:read 时降级为「旧版列出全部表」，并标记降级。"""
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        if "/base/v3/" in url:
+            return FakeResponse(403, {"code": 99991672, "msg": "scope base:block:read required"})
+        if "/bitable/v1/apps/" in url and url.endswith("/tables"):
+            return ok(
+                {
+                    "items": [
+                        {"table_id": "tblA", "name": "社员档案"},
+                        {"table_id": "tblB", "name": "2025秋金盲杖反馈、学时问卷"},
+                    ],
+                    "has_more": False,
+                }
+            )
+        raise AssertionError(url)
+
+    session = RecordingSession(handler=handler)
+    client = make_client(session)
+
+    blocks = client.list_blocks(BASE, block_type="table")
+
+    assert [b["id"] for b in blocks] == ["tblA", "tblB"]
+    assert all(b["type"] == "table" for b in blocks)
+    assert all(b["parent_id"] is None for b in blocks)
+    assert client.blocks_degraded is True
 
 
 # --------------------------------------------------------------------------
 # 切片 3：新旧接口回退
 # --------------------------------------------------------------------------
+
+
+def test_batch_get_falls_back_to_v1_when_scope_missing():
+    """⚠️ 真实事故：batch_get 若不回退，「关联快通道」会整体失效、漏掉全部活动。"""
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        if "/base/v3/" in url:
+            return FakeResponse(
+                403, {"code": 99991672, "msg": "scope base:record:read required"}
+            )
+        if "/bitable/v1/" in url:
+            return ok(
+                {
+                    "items": [
+                        {
+                            "record_id": "recA1",
+                            "fields": {"姓名": [{"text": "张三"}], "志愿学时": 3},
+                        }
+                    ]
+                }
+            )
+        raise AssertionError(url)
+
+    session = RecordingSession(handler=handler)
+    client = make_client(session)
+
+    rows = client.batch_get_records(BASE, TABLE, ["recA1"], field_names=["姓名", "志愿学时"])
+
+    assert [r["record_id"] for r in rows] == ["recA1"]
+    assert rows[0]["fields"]["志愿学时"] == 3
+    assert session.count(contains="/bitable/v1/") == 1
 
 
 def test_fields_falls_back_to_v1_when_v3_forbidden():

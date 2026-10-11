@@ -163,10 +163,11 @@ def cell_text(value: Any) -> str:
         return ""
     if isinstance(value, str):
         return value.strip()
-    if isinstance(value, (int, float)):
-        return _number_text(value)
+    # bool 是 int 的子类，必须先判，否则复选框会显示成 "True" / "False"
     if isinstance(value, bool):
         return "是" if value else "否"
+    if isinstance(value, (int, float)):
+        return _number_text(value)
     if isinstance(value, dict):
         for key in ("text", "name", "value", "en_name"):
             if key in value and isinstance(value[key], (str, int, float)):
@@ -243,8 +244,13 @@ def cell_datetime_ms(value: Any) -> int | None:
 
 
 def cell_link_record_ids(value: Any) -> list[str]:
-    """link 单元格 → 目标 record_id 列表（容错多种形状）。"""
+    """link 单元格 → 目标 record_id 列表。
+
+    ⚠️ 真实飞书返回的键名是 ``link_record_ids``（实测），旧文档/旧样例里
+    常见 ``record_ids``。两种都要认，否则关联匹配会静默失效。
+    """
     ids: list[str] = []
+    id_keys = ("link_record_ids", "record_ids", "record_id", "ids")
 
     def _walk(v: Any) -> None:
         if v is None:
@@ -254,21 +260,23 @@ def cell_link_record_ids(value: Any) -> list[str]:
                 ids.append(v)
             return
         if isinstance(v, dict):
-            for key in ("record_ids", "record_id", "ids"):
+            matched = False
+            for key in id_keys:
                 if key in v:
                     _walk(v[key])
-            for key in ("records", "value"):
-                if key in v and not any(
-                    k in v for k in ("record_ids", "record_id", "ids")
-                ):
-                    _walk(v[key])
+                    matched = True
+            # 只有在没有 id 类键时才下探展示用的字段（text 里不会出现 rec 开头串）
+            if not matched:
+                for key in ("records", "value"):
+                    if key in v:
+                        _walk(v[key])
             return
         if isinstance(v, list):
             for item in v:
                 _walk(item)
 
     _walk(value)
-    # 去重保序
+
     seen: set[str] = set()
     out: list[str] = []
     for i in ids:

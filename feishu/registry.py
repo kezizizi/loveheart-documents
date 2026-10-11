@@ -257,6 +257,12 @@ def build_registry(
 
         index = {b["id"]: b for b in blocks if b.get("id")}
 
+        if getattr(client, "blocks_degraded", False):
+            errors.append(
+                f"[{spec.label}] 读不到文件夹结构（应用缺少 base:block:read 权限），"
+                "部组标签会退化为「其他」。去飞书开放平台给应用补上该权限并发布版本即可恢复。"
+            )
+
         try:
             main_fields = client.list_fields(spec.base_token, spec.main_table_id)
         except Exception as exc:  # noqa: BLE001

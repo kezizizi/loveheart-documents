@@ -321,11 +321,20 @@ def collect_participations(
     if not tables:
         return [], []
 
+    # 关联快通道的前提是这个人的主表关联列**确实有数据**。
+    # 若一个关联都没有（早期数据没维护、或同步流程没跑），说明关联不可信，
+    # 此时必须退化成「逐表扫描」，否则会把参与记录全部漏掉。
+    linked_ok = any(
+        member.link_targets_of(t.base_key, t.main_link_field or "")
+        for t in tables
+        if t.has_main_link
+    )
+
     participations: list[Participation] = []
     errors: list[str] = []
 
     def run(table: ActivityTable) -> list[Participation]:
-        if table.has_main_link:
+        if table.has_main_link and linked_ok:
             return _collect_from_linked(client, member, table)
         return _collect_from_scan(client, member, table)
 

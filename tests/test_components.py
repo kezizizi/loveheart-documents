@@ -74,6 +74,20 @@ def test_result_header_escapes_name():
 # --------------------------------------------------------------------------
 
 
+def test_hero_uses_banner_and_escapes_title():
+    html = components.hero("<b>爱心足迹</b>", "副标题")
+
+    assert "ax-hero-banner" in html, "顶部品牌区应当用官方栏图"
+    assert "ax-hero-band" in html, "栏图下方应当有深红标题带"
+    assert "<b>爱心足迹</b>" not in html
+    assert "&lt;b&gt;爱心足迹&lt;/b&gt;" in html
+
+
+def test_hero_includes_org_name_in_banner_alt():
+    html = components.hero("爱心足迹", "副标题")
+    assert "北京大学学生爱心社" in html
+
+
 def test_group_pills_uses_fallback_color_for_unknown_group():
     html = components.group_pills(["没听说过的部", None])
     assert "没听说过的部" in html

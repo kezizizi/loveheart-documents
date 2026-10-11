@@ -10,8 +10,10 @@ from html import escape
 from typing import Iterable, Sequence
 
 from config import (
+    BRAND_CRIMSON,
     GROUP_FALLBACK_COLOR,
-    ORG_SLOGAN,
+    ORG_NAME,
+    PALETTE_MIST,
     UNKNOWN_GROUP_LABEL,
     group_color,
 )
@@ -63,20 +65,20 @@ def section(title: str, note_text: str = "") -> str:
 # --------------------------------------------------------------------------
 
 
-def hero(
-    title: str,
-    subtitle: str,
-    *,
-    slogan: str = ORG_SLOGAN,
-) -> str:
-    uri = theme.logo_uri()
-    logo = f'<img src="{uri}" alt="爱心社社徽"/>' if uri else ""
+def hero(title: str, subtitle: str) -> str:
+    """顶部品牌区：官方栏图 + 深红标题带（与海报同一套版式）。"""
+    banner = theme.banner_uri()
+    if banner:
+        media = f'<img class="ax-hero-banner" src="{banner}" alt="{esc(ORG_NAME)}"/>'
+    else:  # 素材缺失时退回纯色块，不留白洞
+        media = ""
     return f"""
 <div class="ax-hero">
-  <div class="ax-hero-logo">{logo}</div>
-  <div class="ax-hero-title">{esc(title)}</div>
-  <p class="ax-hero-sub">{esc(subtitle)}</p>
-  <div class="ax-hero-slogan">{esc(slogan)}</div>
+  {media}
+  <div class="ax-hero-band">
+    <div class="ax-hero-title">{esc(title)}</div>
+    <p class="ax-hero-sub">{esc(subtitle)}</p>
+  </div>
 </div>
 """
 
@@ -247,8 +249,8 @@ def term_chips(counts: dict[str, int]) -> str:
     chips = []
     for term, count in counts.items():
         chips.append(
-            f'<span class="ax-pill" style="background:#FFF1E4">{esc(term)}'
-            f'<b style="color:#E02B20;margin-left:6px">{count}</b></span>'
+            f'<span class="ax-pill" style="background:{PALETTE_MIST}66">{esc(term)}'
+            f'<b style="color:{BRAND_CRIMSON};margin-left:6px">{count}</b></span>'
         )
     return '<div class="ax-pills">' + "".join(chips) + "</div>"
 
@@ -257,7 +259,7 @@ def metric_row(items: Sequence[tuple[str, str]]) -> str:
     """一行「标签：值」的文字指标。"""
     parts = [
         f'<span style="margin-right:20px">{esc(label)} '
-        f'<b style="color:#E02B20">{esc(value)}</b></span>'
+        f'<b style="color:{BRAND_CRIMSON}">{esc(value)}</b></span>'
         for label, value in items
     ]
     return f'<div class="ax-result-meta">{"".join(parts)}</div>'

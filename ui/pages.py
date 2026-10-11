@@ -169,7 +169,7 @@ def _query_panel():
         col1, col2 = st.columns(2, gap="medium")
         name = col1.text_input("姓名", key="ax_name", placeholder="例：张三")
         sid = col2.text_input("学号", key="ax_sid", placeholder="例：2300017473")
-        clicked = st.button("生成我的爱心足迹", key="ax_submit")
+        clicked = st.button("生成我的爱心足迹", key="ax_submit", width="stretch")
     return name.strip(), sid.strip(), clicked
 
 
@@ -309,7 +309,7 @@ def _render_partners(result: MemberQueryResult, member) -> None:
             '<div class="ax-panel-hint">统计和你出现在同一场活动里的其他社员（按需计算，可能需要几秒）</div>',
             unsafe_allow_html=True,
         )
-        if st.button("统计同行伙伴", key="ax_partners_btn"):
+        if st.button("统计同行伙伴", key="ax_partners_btn", width="stretch"):
             with st.spinner("正在翻活动签到表…"):
                 count, truncated = count_co_partners(
                     state.get_client(), state.load_registry(state.get_nonce()),
@@ -341,10 +341,11 @@ def _render_tools(result, member, footprint, membership, as_of: date) -> None:
                 file_name=f"{member.name}_活动记录_{as_of:%Y%m%d}.csv",
                 mime="text/csv",
                 key="ax_csv",
+                width="stretch",
             )
 
         with col2:
-            if st.button("生成分享海报", key="ax_poster_btn"):
+            if st.button("生成分享海报", key="ax_poster_btn", width="stretch"):
                 with st.spinner("正在排版海报…"):
                     st.session_state[_POSTER_KEY] = render_poster(
                         name=member.name,
@@ -361,11 +362,12 @@ def _render_tools(result, member, footprint, membership, as_of: date) -> None:
                     file_name=poster_file_name(member.name, as_of),
                     mime="image/png",
                     key="ax_poster_dl",
+                    width="stretch",
                 )
 
         poster = st.session_state.get(_POSTER_KEY)
         if poster:
-            st.image(poster, use_container_width=True)
+            st.image(poster, width="stretch")
 
 
 def _build_csv(member, participations) -> bytes:

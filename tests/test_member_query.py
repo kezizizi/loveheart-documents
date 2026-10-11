@@ -206,6 +206,51 @@ def test_query_member_flags_low_confidence(specs):
     assert result.low_confidence_count >= 2, "仅有姓名可依据的记录必须标为低置信"
 
 
+# --------------------------------------------------------------------------
+# 关联快通道失效时必须退化成扫表
+# --------------------------------------------------------------------------
+
+
+def _strip_main_links(client) -> None:
+    """模拟「主表关联列一个都没填」的坏数据状态。"""
+    for (base_token, table_id), rows in client.records.items():
+        if table_id not in ("tblE5QYLVyf7YBmE", "tbliPIl5lYefS4Nr"):
+            continue
+        for row in rows:
+            fields = row.get("fields") or {}
+            for key in list(fields):
+                if key in ("姓名", "学号", "性别", "年级", "院系", "入社日期", "入社时间"):
+                    continue
+                value = fields[key]
+                if isinstance(value, dict) and (
+                    "link_record_ids" in value or "record_ids" in value
+                ):
+                    fields.pop(key)
+                elif isinstance(value, list) and value and isinstance(value[0], dict) and (
+                    "record_ids" in value[0]
+                ):
+                    fields.pop(key)
+
+
+def test_query_member_falls_back_to_scan_when_links_empty(specs):
+    """主表关联列全空时，必须逐表扫描，绝不能因此漏掉参与记录。"""
+    from tests.conftest import build_fixture_client
+
+    client = build_fixture_client(records_file="records.json")
+    _strip_main_links(client)
+    registry = build_registry(client, specs)
+
+    result = query_member(client, registry, specs, "张三", "2300017473")
+
+    assert result.found is True
+    names = {p.activity_name for p in result.participations}
+    assert "26秋-安宁疗护" in names, "关联列失效时仍必须扫出活动"
+    assert "2025秋金盲杖" in names
+    # 活动记录自身的 link 指向本人 → 仍然可以判为高置信
+    auhen = [p for p in result.participations if p.table_id == "tblp8GDapgvtG4wP"]
+    assert auhen and auhen[0].confidence == "high"
+
+
 def test_query_member_not_found(specs):
     client, registry = _registry_and_client(specs)
     result = query_member(client, registry, specs, "不存在的人", "999")
