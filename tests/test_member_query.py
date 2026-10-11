@@ -351,10 +351,15 @@ def test_query_member_reason_is_none_when_lookup_itself_failed(specs):
 
 
 def test_collect_participations_never_widens_scope(specs):
-    """遍历范围必须**严格等于** member.base_keys。
+    """遍历范围必须**严格等于** member.base_keys —— **扫表通道也一样**。
 
-    活动表扫描是查询里最贵的一步。只在一个库有主表记录的人，
-    绝不去扫另一个库的活动表 —— 飞书 API 调用量有月度上限，
+    「扫表」说的是**问法**（按姓名关键词问一次），不是「把库放宽到全部」。
+    两条通道的遍历范围完全相同，都由这条红线锁住。
+
+    这个用例特意挑了一个**关联列全空**的人（钱只二五），
+    所以每张表都会落到兜底的扫表通道 —— 它守的正是「扫表也不许越界」。
+
+    活动表访问是查询里最贵的一步，飞书 API 调用量有月度上限，
     擅自扩大范围（例如「反正多扫一点更全」）会把配额瞬间吃光。
     这条是写死的红线，任何「顺手优化」都不得突破。
     """
@@ -371,6 +376,12 @@ def test_collect_participations_never_widens_scope(specs):
 
     client.calls.clear()
     collect_participations(client, registry, member)
+
+    # 前提校验：此人没有任何关联，所以走的确实是扫表通道。
+    # 万一将来路由逻辑变了、这个用例悄悄变成「什么都没扫」，这里会先炸。
+    assert any(call[0] == "search_records" for call in client.calls), (
+        "前提：此人的关联列全空，应当逐表走扫表通道"
+    )
 
     touched = {
         call[1]
