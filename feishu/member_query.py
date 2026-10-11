@@ -1,22 +1,23 @@
 """单成员跨库查询。
 
-两条通道
---------
-* **A 通道（权威、快）**：主表的 link 字段非空 → 直接用 record_id
-  批量取活动记录。规避一切重名问题。
-* **B 通道（兜底）**：对「主表没有对应 link 字段」的孤儿活动表，
-  按姓名关键词扫一遍，再逐条判定。
+只认已建立的双向关联
+--------------------
+主表里「这个人参加过哪几场活动」的关联列，是活动记录的**唯一**来源：
+主表里没有关联的活动，一律不查。
 
-参与判定优先级：``link record_id`` > ``学号`` > ``姓名``（低置信）。
+这条规则取代了早期的「扫表兜底」（那时若关联列全空，就逐表按姓名扫一遍）。
+现在不做任何姓名匹配，因此：
+
+* 一条活动记录要么因为被关联而出现，要么根本不出现；
+* 命中即高置信（``confidence`` 恒为 ``high``），不存在「待确认」；
+* 请求量降到最低 —— **只对真的有关联的那几张表发请求，其余 0 请求**。
+
+代价是活动记录必须都已建立关联，否则那条记录对该社员不可见。
 
 成员匹配规则（不可放宽）
 ------------------------
-**在主表里认人时，姓名和学号必须同时命中**，只看姓名一律不算本人；
+在主表里认人时，**姓名和学号必须同时命中**，只看姓名一律不算本人；
 查不到时按 :data:`NOT_FOUND_*` 归因，交给 UI 给出对应的补录引导。
-
-注意别把这条和「参与判定」混淆：判定**某条活动记录**是否属于本人的
-:func:`judge_confidence` 仍然允许「仅姓名」作为最弱证据命中，但会标为低置信 ——
-活动表里确实存在连学号列都没有的表，那时没有更强的证据可用了。
 """
 
 from __future__ import annotations
@@ -49,6 +50,11 @@ _CONTENT_HINTS = ("核心内容", "活动内容", "环节", "印象深刻", "收
 _REFLECTION_HINTS = ("感想", "想说的话", "收获", "体会")
 _MAX_CONTENT_LEN = 160
 
+# ⚠️ 改成「只认关联」之后，参与记录**必然**来自主表里已建立的那条关联，
+# 因此 confidence 恒为 CONFIDENCE_HIGH，另两档在查询层已经用不到了。
+# 之所以还没删：`confidence` 会出现在 CSV 导出的「置信度」列和 UI 的标签上，
+# 那是**给人看的输出**，要不要连列一起撤掉得单独决定。
+# 在此之前，MEDIUM / LOW 只是历史遗留，新代码不要再去判它们。
 CONFIDENCE_HIGH = "high"
 CONFIDENCE_MEDIUM = "medium"
 CONFIDENCE_LOW = "low"
@@ -353,69 +359,38 @@ def build_participation(
     )
 
 
-def judge_confidence(
-    table: ActivityTable, row: dict[str, Any], member: MergedMember
-) -> str | None:
-    """判定这条活动记录是否属于本人，以及可信度。不属于返回 None。"""
-    fields = row.get("fields") or {}
-
-    # 1) link record_id —— 最强证据。
-    #    若 link 字段有值但不指向本人，说明它明确属于别人，**直接判定不是本人**，
-    #    绝不能再退回按姓名匹配（同名不同人就是这么误判出来的）。
-    if table.link_field:
-        targets = set(S.cell_link_record_ids(fields.get(table.link_field)))
-        if targets:
-            if targets & set(member.record_ids_of(table.base_key)):
-                return CONFIDENCE_HIGH
-            return None
-
-    # 2) 学号
-    if table.has_sid:
-        key = _find_key(fields, "学号")
-        if key and sids_equal(fields.get(key), member.sid):
-            return CONFIDENCE_MEDIUM
-
-    # 3) 姓名 —— 最弱，仅在没有更强证据时使用
-    if table.has_name:
-        key = _find_key(fields, "姓名")
-        if key and names_equal(S.cell_text(fields.get(key)), member.name):
-            return CONFIDENCE_LOW
-
-    return None
-
-
-def _collect_from_linked(
-    client: BitableClient, member: MergedMember, table: ActivityTable
+def _fetch_linked(
+    client: BitableClient, table: ActivityTable, record_ids: Sequence[str]
 ) -> list[Participation]:
-    """A 通道：靠主表 link 字段拿到的 record_id 精确取数。"""
-    ids = member.link_targets_of(table.base_key, table.main_link_field or "")
-    if not ids:
-        return []
+    """按主表关联列给出的 record_id 精确取数。
+
+    拿到的一定是本人记录，因此置信度恒为 ``high`` —— 这条路没有「可能是同名」的问题。
+    """
     rows = client.batch_get_records(
-        table.base_token, table.table_id, list(ids), field_names=list(table.safe_fields)
+        table.base_token,
+        table.table_id,
+        list(record_ids),
+        field_names=list(table.safe_fields),
     )
     return [build_participation(table, row, CONFIDENCE_HIGH) for row in rows]
 
 
-def _collect_from_scan(
-    client: BitableClient, member: MergedMember, table: ActivityTable
-) -> list[Participation]:
-    """B 通道：孤儿活动表，按姓名关键词扫。"""
-    if table.record_count_hint == 0:
-        return []
+def linked_tables(
+    registry: ActivityRegistry, member: MergedMember
+) -> list[tuple[ActivityTable, tuple[str, ...]]]:
+    """挑出「主表里**确实关联了**记录」的表，连同那些 record_id。
 
-    rows = client.search_records(
-        table.base_token,
-        table.table_id,
-        field_names=list(table.safe_fields),
-        keyword=member.name,
-        search_fields=["姓名"],
-    )
-    out: list[Participation] = []
-    for row in rows:
-        confidence = judge_confidence(table, row, member)
-        if confidence is not None:
-            out.append(build_participation(table, row, confidence))
+    这是整条查询**唯一**的取数范围。没有关联的活动一律不查 ——
+    不做姓名兜底扫描，所以请求量等于「真有参与记录的表数」，其余表 0 请求。
+    """
+    out: list[tuple[ActivityTable, tuple[str, ...]]] = []
+    for key in member.base_keys:
+        for table in registry.tables_of(key):
+            if not table.main_link_field:
+                continue
+            ids = member.link_targets_of(table.base_key, table.main_link_field)
+            if ids:
+                out.append((table, ids))
     return out
 
 
@@ -426,39 +401,29 @@ def collect_participations(
     *,
     max_workers: int = 8,
 ) -> tuple[list[Participation], list[str]]:
-    """并发采集该人的全部活动参与记录。单表失败被隔离。
+    """并发采集该人的活动参与记录。单表失败被隔离。
 
-    🚩 **红线：遍历范围恒等于 ``member.base_keys``，永远不要扩大。**
-    活动表扫描是整条查询里最贵的一步（每个库几十上百张表各一次请求），
-    而飞书 API 调用量有月度上限。历史上曾出现「顺手改成扫全部库」的想法，
-    理由是「多扫一点结果更全」—— 那不是优化，是把配额烧光。
-    只在某个库有主表记录的人，就不该去碰另一个库的活动表。
+    范围由 :func:`linked_tables` 决定：**只查主表里有该人关联记录的那几张表**，
+    其余一张都不碰（连空表都不用问）。没有关联就是没有参与记录。
+
+    🚩 这条范围是红线：活动表访问是整条链路里最贵的一步，而飞书 API 调用量
+    有月度上限。历史上出现过「顺手改成扫全部库」的想法，理由是「多扫一点结果更全」
+    —— 那不是优化，是把配额烧光。
     ``tests/test_member_query.py::test_collect_participations_never_widens_scope``
-    是这条红线的守卫测试。
+    是守卫测试。
     """
-    tables = [t for key in member.base_keys for t in registry.tables_of(key)]
-    if not tables:
+    targets = linked_tables(registry, member)
+    if not targets:
         return [], []
-
-    # 关联快通道的前提是这个人的主表关联列**确实有数据**。
-    # 若一个关联都没有（早期数据没维护、或同步流程没跑），说明关联不可信，
-    # 此时必须退化成「逐表扫描」，否则会把参与记录全部漏掉。
-    linked_ok = any(
-        member.link_targets_of(t.base_key, t.main_link_field or "")
-        for t in tables
-        if t.has_main_link
-    )
 
     participations: list[Participation] = []
     errors: list[str] = []
 
-    def run(table: ActivityTable) -> list[Participation]:
-        if table.has_main_link and linked_ok:
-            return _collect_from_linked(client, member, table)
-        return _collect_from_scan(client, member, table)
-
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(run, t): t for t in tables}
+        futures = {
+            pool.submit(_fetch_linked, client, table, ids): table
+            for table, ids in targets
+        }
         for future in as_completed(futures):
             table = futures[future]
             try:

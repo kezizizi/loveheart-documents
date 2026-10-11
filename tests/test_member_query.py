@@ -8,12 +8,11 @@ from config import SENSITIVE_FIELDS
 from feishu.client import SchemaChangedError
 from feishu.member_query import (
     CONFIDENCE_HIGH,
-    CONFIDENCE_LOW,
     NOT_FOUND_NAME,
     NOT_FOUND_SID,
     NOT_FOUND_SID_MISSING,
     collect_participations,
-    judge_confidence,
+    linked_tables,
     lookup_member,
     main_projection,
     query_member,
@@ -131,51 +130,44 @@ def test_lookup_reports_missing_sid_on_archive(specs):
 
 
 # --------------------------------------------------------------------------
-# 参与判定优先级
+# 只认关联 —— 不存在姓名匹配通道
 # --------------------------------------------------------------------------
 
 
-def test_judge_link_record_id_beats_name(specs):
-    """link 指向别人时，即使同名也必须判为「不是本人」。"""
+def test_linked_tables_returns_only_tables_with_link_targets(specs):
+    """取数范围 = 主表里**确实关联了记录**的那些表。没关联的表进不来。"""
     client, registry = _registry_and_client(specs)
     merged = _merged(client, registry, specs)
-    auhen = registry.by_table_id()["tblp8GDapgvtG4wP"]
 
-    other = {
-        "record_id": "recA3",
-        "fields": {"姓名": [{"text": "张三"}], "社员档案": [{"record_ids": ["recM27c"]}]},
-    }
-    assert judge_confidence(auhen, other, merged) is None
+    targets = linked_tables(registry, merged)
+    assert targets, "张三有关联，应当挑出若干张表"
 
-    mine = {
-        "record_id": "recA1",
-        "fields": {"姓名": [{"text": "张三"}], "社员档案": [{"record_ids": ["recM26"]}]},
-    }
-    assert judge_confidence(auhen, mine, merged) == CONFIDENCE_HIGH
+    for table, ids in targets:
+        assert ids, "挑出来的每一张表都必须带着 record_id"
+        assert table.main_link_field
 
 
-def test_judge_falls_back_to_name_only_when_link_empty(specs):
-    client, registry = _registry_and_client(specs)
-    merged = _merged(client, registry, specs)
-    orphan = registry.by_table_id()["tbl6CT22uQUGe7gV"]
+def test_linked_tables_is_empty_without_any_link(specs):
+    """一个关联都没有 → 范围为空，一张表都不查。
 
-    row = {
-        "record_id": "recD2",
-        "fields": {"姓名": [{"text": "张三"}], "社员档案": []},
-    }
-    assert judge_confidence(orphan, row, merged) == CONFIDENCE_LOW
+    这正是蔡昀泽那种情形：档案在、但从没参加过活动，
+    于是主表里没有任何关联记录 —— 那就什么活动表都不用碰。
+    """
+    from services.identity import merge_members
+    from tests.conftest import build_fixture_client
 
+    client = build_fixture_client(records_file="records.json")
+    _strip_main_links(client)
+    registry = build_registry(client, specs)
+    merged = merge_members(
+        list(lookup_member(client, next(s for s in specs if s.key == "base_25_26"),
+                           registry, "张三", "2300017473").records)
+        + list(lookup_member(client, next(s for s in specs if s.key == "base_26_27"),
+                             registry, "张三", "2300017473").records)
+    )
 
-def test_judge_uses_sid_when_available(specs):
-    client, registry = _registry_and_client(specs)
-    merged = _merged(client, registry, specs)
-    jinmang = registry.by_table_id()["tblB74WxX7708aKd"]
-
-    row = {
-        "record_id": "recJ1",
-        "fields": {"姓名": [{"text": "张三"}], "学号": 2300017473, "社员档案": []},
-    }
-    assert judge_confidence(jinmang, row, merged) == "medium"
+    assert merged is not None
+    assert linked_tables(registry, merged) == []
 
 
 def _merged(client, registry, specs):
@@ -209,11 +201,16 @@ def test_query_member_collects_expected_activities(specs):
     result = query_member(client, registry, specs, "张三", "2300017473")
     names = {p.activity_name for p in result.participations}
 
+    # 全部来自「主表里已建立的关联」
     assert "26秋-安宁疗护" in names
     assert "26秋-敬老院" in names
     assert "2025秋金盲杖" in names
     assert "2025秋扫雪" in names
-    assert "26秋-守望星空夏令营影展" in names
+
+    # fixture 里的「26秋-守望星空夏令营影展」是一张**主表侧没有关联列**的孤儿表。
+    # 旧实现会逐表按姓名扫出来，新口径只认关联，所以它不再出现 ——
+    # 这正是设计取舍（真实数据里 171 张表都有主表侧关联列，不存在这种孤儿）。
+    assert "26秋-守望星空夏令营影展" not in names
 
 
 def test_query_member_does_not_leak_same_name_person_hours(specs):
@@ -250,20 +247,23 @@ def test_query_member_projections_exclude_sensitive_fields(specs):
         assert not leaked, f"{op} 对 {table_id} 泄露了敏感字段 {leaked}"
 
 
-def test_query_member_flags_low_confidence(specs):
+def test_query_member_marks_every_record_high_confidence(specs):
+    """所有记录都来自关联，因此不存在「待确认」的低置信记录。"""
     client, registry = _registry_and_client(specs)
     result = query_member(client, registry, specs, "张三", "2300017473")
 
-    assert result.low_confidence_count >= 2, "仅有姓名可依据的记录必须标为低置信"
+    assert result.participations, "前提：这个人有活动记录"
+    assert result.low_confidence_count == 0
+    assert all(p.confidence == CONFIDENCE_HIGH for p in result.participations)
 
 
 # --------------------------------------------------------------------------
-# 关联快通道失效时必须退化成扫表
+# 主表关联列全空时：不查，也不扫
 # --------------------------------------------------------------------------
 
 
 def _strip_main_links(client) -> None:
-    """模拟「主表关联列一个都没填」的坏数据状态。"""
+    """模拟「主表关联列一个都没填」。按新口径这种状态不该出现，故也不兜底。"""
     for (base_token, table_id), rows in client.records.items():
         if table_id not in ("tblE5QYLVyf7YBmE", "tbliPIl5lYefS4Nr"):
             continue
@@ -283,23 +283,36 @@ def _strip_main_links(client) -> None:
                     fields.pop(key)
 
 
-def test_query_member_falls_back_to_scan_when_links_empty(specs):
-    """主表关联列全空时，必须逐表扫描，绝不能因此漏掉参与记录。"""
+def _touched_activity_tables(client, registry) -> set[str]:
+    """这次查询实际问过的**活动表** id（排除主表查询与库 token 噪声）。"""
+    activity = set(registry.by_table_id())
+    return {
+        call[2]
+        for call in client.calls
+        if call[0] in ("search_records", "batch_get_records") and call[2] in activity
+    }
+
+
+def test_query_member_without_links_asks_nothing(specs):
+    """主表一个关联都没有 → 返回空，且**一张活动表都不去问**。
+
+    这是刻意的取舍：不做姓名兜底扫描。代价是活动记录必须都已建立关联，
+    否则那条记录对该社员不可见。
+    """
     from tests.conftest import build_fixture_client
 
     client = build_fixture_client(records_file="records.json")
     _strip_main_links(client)
     registry = build_registry(client, specs)
 
+    client.calls.clear()
     result = query_member(client, registry, specs, "张三", "2300017473")
 
-    assert result.found is True
-    names = {p.activity_name for p in result.participations}
-    assert "26秋-安宁疗护" in names, "关联列失效时仍必须扫出活动"
-    assert "2025秋金盲杖" in names
-    # 活动记录自身的 link 指向本人 → 仍然可以判为高置信
-    auhen = [p for p in result.participations if p.table_id == "tblp8GDapgvtG4wP"]
-    assert auhen and auhen[0].confidence == "high"
+    assert result.found is True, "人还是找得到的，只是没有活动记录"
+    assert result.participations == ()
+
+    touched = _touched_activity_tables(client, registry)
+    assert touched == set(), f"没有关联就不该去问活动表，实际问了 {touched}"
 
 
 def test_query_member_not_found(specs):
@@ -351,25 +364,23 @@ def test_query_member_reason_is_none_when_lookup_itself_failed(specs):
 
 
 def test_collect_participations_never_widens_scope(specs):
-    """遍历范围必须**严格等于** member.base_keys —— **扫表通道也一样**。
+    """取数范围 = 主表里已建立的关联，**一张都不许多问**。
 
-    「扫表」说的是**问法**（按姓名关键词问一次），不是「把库放宽到全部」。
-    两条通道的遍历范围完全相同，都由这条红线锁住。
+    这条红线同时管住两件事：
+    * 不外溢到别的库 —— 只在 25-26 有主表记录的人，绝不去碰 26-27 的活动表；
+    * 不顺手多扫 —— 即便在 25-26 库内，没关联的活动表也一张都不问。
 
-    这个用例特意挑了一个**关联列全空**的人（钱只二五），
-    所以每张表都会落到兜底的扫表通道 —— 它守的正是「扫表也不许越界」。
-
-    活动表访问是查询里最贵的一步，飞书 API 调用量有月度上限，
-    擅自扩大范围（例如「反正多扫一点更全」）会把配额瞬间吃光。
-    这条是写死的红线，任何「顺手优化」都不得突破。
+    活动表访问是整条链路里最贵的一步，而飞书 API 调用量有月度上限。
+    「反正多扫一点更全」这种念头必须压住。
     """
     from services.identity import merge_members
 
     client, registry = _registry_and_client(specs)
     spec_25 = next(s for s in specs if s.key == "base_25_26")
 
+    # 只用张三在 25-26 的那条主表记录 → 造一个「只在一个库有档案」的人
     member = merge_members(
-        list(lookup_member(client, spec_25, registry, "钱只二五", "2300018888").records)
+        list(lookup_member(client, spec_25, registry, "张三", "2300017473").records)
     )
     assert member is not None
     assert member.base_keys == ("base_25_26",), "前提：此人只在一个库有主表记录"
@@ -377,20 +388,20 @@ def test_collect_participations_never_widens_scope(specs):
     client.calls.clear()
     collect_participations(client, registry, member)
 
-    # 前提校验：此人没有任何关联，所以走的确实是扫表通道。
-    # 万一将来路由逻辑变了、这个用例悄悄变成「什么都没扫」，这里会先炸。
-    assert any(call[0] == "search_records" for call in client.calls), (
-        "前提：此人的关联列全空，应当逐表走扫表通道"
+    # 一、不存在姓名匹配通道，因此不该有任何扫表请求
+    assert not any(call[0] == "search_records" for call in client.calls), (
+        "不该有任何扫表请求：取数只走关联"
     )
 
-    touched = {
-        call[1]
-        for call in client.calls
-        if call[0] in ("search_records", "batch_get_records")
-    }
-    assert touched == {BASE_25_26}, (
-        f"红线：不得扩大遍历范围（飞书 API 有月度配额），实际触碰了 {touched}"
+    # 二、只许问「有关联」的表 —— 张三的 25-26 记录只关联了这两张
+    touched = _touched_activity_tables(client, registry)
+    assert touched == {"tblB74WxX7708aKd", "tblzVoQoJQUAbjLi"}, (
+        f"红线：只该问有关联的表，实际问了 {touched}"
     )
+
+    # 三、红线：绝不外溢到另一个库
+    other_base_tables = {t.table_id for t in registry.tables_of("base_26_27")}
+    assert not (touched & other_base_tables)
 
 
 # --------------------------------------------------------------------------
@@ -439,11 +450,13 @@ def test_query_propagates_schema_change(specs):
 
 
 def test_collect_isolates_single_table_failure(specs):
-    from tests.conftest import build_fixture_client
+    """单张表取数失败要被隔离：其余表照常返回，失败那条进 errors。"""
     from services.identity import merge_members
+    from tests.conftest import build_fixture_client
 
+    # 挑一张**确实有关联**的表让它失败（孤儿表现在根本不会被访问）
     client = build_fixture_client(
-        records_file="records.json", fail_records=["tbl6CT22uQUGe7gV"]
+        records_file="records.json", fail_records=["tblNVIQJOZZHCaC8"]
     )
     registry = build_registry(client, specs)
     records = []
@@ -457,7 +470,7 @@ def test_collect_isolates_single_table_failure(specs):
     parts, errors = collect_participations(client, registry, merged)
 
     assert any(p.table_id == "tblp8GDapgvtG4wP" for p in parts), "其他表不受影响"
-    assert errors and any("守望星空" in e for e in errors)
+    assert errors and any("敬老院" in e for e in errors)
 
 
 def test_query_member_survives_one_base_unreadable(specs):

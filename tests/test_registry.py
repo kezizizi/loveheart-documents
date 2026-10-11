@@ -410,3 +410,30 @@ def test_time_detection_skips_over_long_names():
         {"name": PROSE_FIELD + "的参与时间", "type": 5},
     ]
     assert detect_time_fields(fields) == ("参与时间",)
+
+
+def test_name_field_matches_reality_not_a_hardcoded_name(specs):
+    """⚠️ 真实数据里有的活动表把姓名列命名为「1、您的姓名」。
+
+    硬写「姓名」去请求会让那张表的查询直接失败（FieldNameNotFound），
+    「与谁同行」会因为静默跳过它而少算人。
+    """
+    from feishu.models import ActivityTable
+
+    loose = ActivityTable(
+        base_key="k", base_token="t", table_id="tblX",
+        name="某活动", safe_fields=("1、您的姓名", "参与时间"),
+    )
+    assert loose.name_field == "1、您的姓名"
+
+    exact = ActivityTable(
+        base_key="k", base_token="t", table_id="tblY",
+        name="某活动", safe_fields=("姓名", "您的姓名"),
+    )
+    assert exact.name_field == "姓名", "有精确的「姓名」时应当优先"
+
+    none = ActivityTable(
+        base_key="k", base_token="t", table_id="tblZ",
+        name="某活动", safe_fields=("参与时间",),
+    )
+    assert none.name_field is None

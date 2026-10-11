@@ -162,18 +162,21 @@ def count_co_partners(
 
     for table_id in table_ids:
         table = by_id.get(table_id)
-        if table is None or not table.has_name:
+        if table is None:
+            continue
+        name_field = table.name_field
+        if not name_field:
             continue
         try:
             rows = client.search_records(
-                table.base_token, table.table_id, field_names=["姓名"]
+                table.base_token, table.table_id, field_names=[name_field]
             )
         except Exception:  # noqa: BLE001 - 单表失败不影响整体
             continue
         scanned += 1
         for row in rows:
             fields = row.get("fields") or {}
-            text = S.cell_text(fields.get("姓名"))
+            text = S.cell_text(fields.get(name_field))
             normalized = text.replace(" ", "")
             if normalized:
                 names.add(normalized)

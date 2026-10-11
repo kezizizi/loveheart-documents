@@ -41,6 +41,17 @@ class ActivityTable:
         return bool(self.main_link_field)
 
     @property
+    def name_field(self) -> str | None:
+        """本表里「姓名」那一列**实际**叫什么。
+
+        字段名并不统一（实测有表叫「1、您的姓名」），所以不能硬写「姓名」——
+        请求一个不存在的字段名会让整张表的查询直接失败。
+        """
+        if "姓名" in self.safe_fields:
+            return "姓名"
+        return next((n for n in self.safe_fields if "姓名" in n), None)
+
+    @property
     def color_key(self) -> str:
         return self.group or "其他"
 
