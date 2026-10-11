@@ -9,6 +9,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import config
+from feishu.member_query import (
+    NOT_FOUND_NAME,
+    NOT_FOUND_SID,
+    NOT_FOUND_SID_MISSING,
+)
 from feishu.models import Footprint, TimelineItem
 from ui import components
 
@@ -165,3 +171,38 @@ def test_no_duplicate_streamlit_widget_keys():
     seen: set[str] = set()
     duplicates = {k for k in keys if k in seen or seen.add(k)}  # type: ignore[func-returns-value]
     assert not duplicates, f"存在重复的 widget key：{sorted(duplicates)}"
+
+
+# --------------------------------------------------------------------------
+# 查不到时的引导
+# --------------------------------------------------------------------------
+
+
+def test_supplement_form_url_is_current():
+    """补录问卷链接是唯一的自助出口，写错等于把人堵在门外。"""
+    assert config.SUPPLEMENT_FORM_URL.endswith("shrcnVbvETHWKfha6F4bP9b2Idb")
+
+
+def test_not_found_note_always_points_to_supplement_form():
+    """不管归因是什么，都必须给出补录入口。"""
+    for reason in (NOT_FOUND_NAME, NOT_FOUND_SID, NOT_FOUND_SID_MISSING, None):
+        html = components.not_found_note(reason)
+        assert config.SUPPLEMENT_FORM_URL in html, f"{reason} 没有给出补录链接"
+        assert "补录" in html
+
+
+def test_not_found_note_explains_missing_sid():
+    """档案里没填学号 —— 这是 450 条历史记录的真实归因，提示必须说得具体。"""
+    html = components.not_found_note(NOT_FOUND_SID_MISSING)
+    assert "没有填学号" in html
+
+
+def test_not_found_note_asks_to_recheck_sid_when_mismatched():
+    html = components.not_found_note(NOT_FOUND_SID)
+    assert "学号" in html
+    assert "核对" in html
+
+
+def test_not_found_note_survives_unknown_reason():
+    html = components.not_found_note("某个没定义过的原因")
+    assert config.SUPPLEMENT_FORM_URL in html

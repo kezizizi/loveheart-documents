@@ -39,7 +39,7 @@ FONT_CANDIDATES: Final[tuple[str, ...]] = (
 ORG_NAME: Final = "北京大学学生爱心社"
 ORG_SLOGAN: Final = "奉献爱心，呼唤爱心，自我教育"
 SUPPLEMENT_FORM_URL: Final = (
-    "https://acngyried1he.feishu.cn/share/base/form/shrcnsgqhMNq6pJ43llUQ7M7rgg"
+    "https://acngyried1he.feishu.cn/share/base/form/shrcnVbvETHWKfha6F4bP9b2Idb"
 )
 
 BRAND_CRIMSON: Final = "#81021F"        # 栏图底色，主品牌色

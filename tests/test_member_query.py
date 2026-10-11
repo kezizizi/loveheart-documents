@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import pytest
+
 from config import SENSITIVE_FIELDS
+from feishu.client import SchemaChangedError
 from feishu.member_query import (
     CONFIDENCE_HIGH,
     CONFIDENCE_LOW,
+    NOT_FOUND_NAME,
+    NOT_FOUND_SID,
+    NOT_FOUND_SID_MISSING,
     collect_participations,
-    find_member_records,
     judge_confidence,
+    lookup_member,
     main_projection,
     query_member,
 )
@@ -59,8 +65,8 @@ def test_find_member_across_number_and_text_sid(specs):
     spec_26 = next(s for s in specs if s.key == "base_26_27")
 
     # 25-26 库学号是数字，26-27 库学号是文本 —— 传字符串两边都要命中
-    recs_25 = find_member_records(client, spec_25, registry, "张三", "2300017473")
-    recs_26 = find_member_records(client, spec_26, registry, "张三", "2300017473")
+    recs_25 = lookup_member(client, spec_25, registry, "张三", "2300017473").records
+    recs_26 = lookup_member(client, spec_26, registry, "张三", "2300017473").records
 
     assert [r.record_id for r in recs_25] == ["recM25"]
     assert [r.record_id for r in recs_26] == ["recM26"]
@@ -71,14 +77,57 @@ def test_find_member_does_not_confuse_same_name(specs):
     client, registry = _registry_and_client(specs)
     spec_26 = next(s for s in specs if s.key == "base_26_27")
 
-    recs = find_member_records(client, spec_26, registry, "张三", "2300017473")
+    recs = lookup_member(client, spec_26, registry, "张三", "2300017473").records
     assert all(r.record_id != "recM27c" for r in recs)
 
 
 def test_find_member_returns_empty_when_absent(specs):
     client, registry = _registry_and_client(specs)
     spec_26 = next(s for s in specs if s.key == "base_26_27")
-    assert find_member_records(client, spec_26, registry, "查无此人", "1") == []
+    assert lookup_member(client, spec_26, registry, "查无此人", "1").records == ()
+
+
+# --------------------------------------------------------------------------
+# 查不到的原因诊断（必须复用已有检索结果，不得额外发请求）
+# --------------------------------------------------------------------------
+
+
+def test_lookup_reason_is_none_when_found(specs):
+    client, registry = _registry_and_client(specs)
+    spec_25 = next(s for s in specs if s.key == "base_25_26")
+    assert lookup_member(client, spec_25, registry, "张三", "2300017473").reason is None
+
+
+def test_lookup_reports_name_not_in_archive(specs):
+    client, registry = _registry_and_client(specs)
+    spec_25 = next(s for s in specs if s.key == "base_25_26")
+
+    look = lookup_member(client, spec_25, registry, "查无此人", "1")
+
+    assert look.records == ()
+    assert look.reason == NOT_FOUND_NAME
+
+
+def test_lookup_reports_sid_mismatch(specs):
+    """姓名在档案里，但登记的学号跟输入的对不上。"""
+    client, registry = _registry_and_client(specs)
+    spec_26 = next(s for s in specs if s.key == "base_26_27")
+
+    look = lookup_member(client, spec_26, registry, "李四", "9999999999")
+
+    assert look.records == ()
+    assert look.reason == NOT_FOUND_SID
+
+
+def test_lookup_reports_missing_sid_on_archive(specs):
+    """姓名命中但那条档案压根没填学号 —— 只能靠补录解决。"""
+    client, registry = _registry_and_client(specs)
+    spec_25 = next(s for s in specs if s.key == "base_25_26")
+
+    look = lookup_member(client, spec_25, registry, "赵无号", "2300010000")
+
+    assert look.records == ()
+    assert look.reason == NOT_FOUND_SID_MISSING
 
 
 # --------------------------------------------------------------------------
@@ -134,7 +183,9 @@ def _merged(client, registry, specs):
 
     records = []
     for spec in specs:
-        records.extend(find_member_records(client, spec, registry, "张三", "2300017473"))
+        records.extend(
+            lookup_member(client, spec, registry, "张三", "2300017473").records
+        )
     return merge_members(records)
 
 
@@ -258,6 +309,122 @@ def test_query_member_not_found(specs):
     assert result.found is False
     assert result.member is None
     assert result.participations == ()
+    assert result.not_found_reason == NOT_FOUND_NAME
+
+
+def test_query_member_prefers_sid_missing_reason(specs):
+    """「档案里查到姓名但没填学号」比「查不到姓名」更可行动，优先级应更高。
+
+    「赵无号」只在 25-26 有档案且没填学号，26-27 连姓名都没有 ——
+    必须归因到「缺学号」，而不是笼统的「查不到」。
+    """
+    client, registry = _registry_and_client(specs)
+    result = query_member(client, registry, specs, "赵无号", "2300010000")
+
+    assert result.found is False
+    assert result.not_found_reason == NOT_FOUND_SID_MISSING
+
+
+def test_query_member_reason_is_none_when_lookup_itself_failed(specs):
+    """所有库的检索都报错时，不能编一个「姓名查不到」出来。
+
+    那种情况下我们**根本不知道**人家在不在档案里，瞎归因会把人引到补录问卷，
+    而问题其实出在系统这一侧。
+    """
+    client, registry = _registry_and_client(specs)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("网络炸了")
+
+    client.search_records = boom  # type: ignore[method-assign]
+
+    result = query_member(client, registry, specs, "张三", "2300017473")
+
+    assert result.found is False
+    assert result.not_found_reason is None
+    assert result.errors, "检索失败必须被记录下来，不能悄悄退化成「查无此人」"
+
+
+# --------------------------------------------------------------------------
+# 🚩 红线：遍历范围
+# --------------------------------------------------------------------------
+
+
+def test_collect_participations_never_widens_scope(specs):
+    """遍历范围必须**严格等于** member.base_keys。
+
+    活动表扫描是查询里最贵的一步。只在一个库有主表记录的人，
+    绝不去扫另一个库的活动表 —— 飞书 API 调用量有月度上限，
+    擅自扩大范围（例如「反正多扫一点更全」）会把配额瞬间吃光。
+    这条是写死的红线，任何「顺手优化」都不得突破。
+    """
+    from services.identity import merge_members
+
+    client, registry = _registry_and_client(specs)
+    spec_25 = next(s for s in specs if s.key == "base_25_26")
+
+    member = merge_members(
+        list(lookup_member(client, spec_25, registry, "钱只二五", "2300018888").records)
+    )
+    assert member is not None
+    assert member.base_keys == ("base_25_26",), "前提：此人只在一个库有主表记录"
+
+    client.calls.clear()
+    collect_participations(client, registry, member)
+
+    touched = {
+        call[1]
+        for call in client.calls
+        if call[0] in ("search_records", "batch_get_records")
+    }
+    assert touched == {BASE_25_26}, (
+        f"红线：不得扩大遍历范围（飞书 API 有月度配额），实际触碰了 {touched}"
+    )
+
+
+# --------------------------------------------------------------------------
+# 结构变更必须穿透「单表失败隔离」
+# --------------------------------------------------------------------------
+
+
+def _make_schema_changed(client):
+    def boom(*_args, **_kwargs):
+        raise SchemaChangedError("活动表结构已变更（字段被改名或删除）")
+
+    client.search_records = boom  # type: ignore[method-assign]
+    client.batch_get_records = boom  # type: ignore[method-assign]
+    return client
+
+
+def test_lookup_propagates_schema_change(specs):
+    """结构变更必须穿透兜底尝试的宽泛 except。
+
+    否则会被当成「这张表读不到」静默吞掉，
+    上层的「重建注册表再试一次」永远触发不了。
+    """
+    client, registry = _registry_and_client(specs)
+    spec_25 = next(s for s in specs if s.key == "base_25_26")
+    _make_schema_changed(client)
+
+    with pytest.raises(SchemaChangedError):
+        lookup_member(client, spec_25, registry, "张三", "2300017473")
+
+
+def test_collect_propagates_schema_change(specs):
+    client, registry = _registry_and_client(specs)
+    merged = _merged(client, registry, specs)
+    _make_schema_changed(client)
+
+    with pytest.raises(SchemaChangedError):
+        collect_participations(client, registry, merged)
+
+
+def test_query_propagates_schema_change(specs):
+    client, registry = _registry_and_client(specs)
+    _make_schema_changed(client)
+
+    with pytest.raises(SchemaChangedError):
+        query_member(client, registry, specs, "张三", "2300017473")
 
 
 def test_collect_isolates_single_table_failure(specs):
@@ -270,7 +437,9 @@ def test_collect_isolates_single_table_failure(specs):
     registry = build_registry(client, specs)
     records = []
     for spec in specs:
-        records.extend(find_member_records(client, spec, registry, "张三", "2300017473"))
+        records.extend(
+            lookup_member(client, spec, registry, "张三", "2300017473").records
+        )
     merged = merge_members(records)
     assert merged is not None
 

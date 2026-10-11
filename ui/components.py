@@ -14,8 +14,13 @@ from config import (
     GROUP_FALLBACK_COLOR,
     ORG_NAME,
     PALETTE_MIST,
+    SUPPLEMENT_FORM_URL,
     UNKNOWN_GROUP_LABEL,
     group_color,
+)
+from feishu.member_query import (
+    NOT_FOUND_SID,
+    NOT_FOUND_SID_MISSING,
 )
 from feishu.models import Footprint, TimelineItem
 from services.membership_date import format_date
@@ -50,6 +55,35 @@ def note(kind: str, body: str, *, html: bool = False) -> str:
     return (
         f'<div class="ax-note ax-note-{kind}"><span>{icon}</span>'
         f"<div>{inner}</div></div>"
+    )
+
+
+# 查不到时的开场白。按归因说清楚「到底哪一项没对上」，
+# 比笼统的「没找到你的档案」有用得多 —— 用户才知道该改什么。
+_NOT_FOUND_LEAD: dict[str, str] = {
+    NOT_FOUND_SID_MISSING: "档案里查到了你的姓名，但那条记录没有填学号。",
+    NOT_FOUND_SID: "档案里查到了你的姓名，但学号对不上。",
+}
+
+_NOT_FOUND_FALLBACK = "小爱同学没有找到你的档案。"
+
+
+def not_found_note(reason: str | None) -> str:
+    """查不到时的提示条：按归因给具体说法，并统一导向补录问卷。
+
+    匹配规则是**姓名与学号必须同时命中**，所以任何一种归因，
+    自助出口都只有「补录」一条路。
+    """
+    lead = _NOT_FOUND_LEAD.get(reason or "", _NOT_FOUND_FALLBACK)
+    hint = "请先核对一下学号是否填错；" if reason == NOT_FOUND_SID else ""
+    link = (
+        f'<a href="{esc(SUPPLEMENT_FORM_URL)}" target="_blank" rel="noopener">'
+        "点这里补录信息</a>"
+    )
+    return note(
+        "warn",
+        f"{esc(lead)}{hint}如果你确实加入过爱心社，请{link}，补录后即可查到。",
+        html=True,
     )
 
 

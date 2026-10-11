@@ -10,6 +10,7 @@ import pytest
 from feishu.client import (
     FeishuError,
     FeishuHttpClient,
+    SchemaChangedError,
     SensitiveFieldError,
     assert_names_allowed,
     project,
@@ -332,3 +333,147 @@ def test_error_body_is_surfaced():
         client.list_blocks(BASE)
 
     assert info.value.code == 1254005
+
+
+# --------------------------------------------------------------------------
+# 切片 6：表结构已变（字段被改名 / 删除）
+# --------------------------------------------------------------------------
+
+
+def test_search_records_raises_schema_changed_on_unknown_field():
+    """⚠️ 注册表缓存 24 小时；骨干改名或删列后，缓存的旧字段名会让请求整体失败。
+
+    必须抛可识别的 :class:`SchemaChangedError`，让上层能重建注册表后重试。
+    **绝不能静默丢掉未知字段继续查** —— 那会让学时字段悄悄变成 0，
+    比直接报错危险得多。
+    """
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        return err(1254045, "FieldNameNotFound", status=200)
+
+    client = make_client(RecordingSession(handler=handler))
+
+    with pytest.raises(SchemaChangedError) as info:
+        client.search_records(BASE, TABLE, field_names=["姓名", "已改名的学时字段"])
+
+    assert info.value.code == 1254045
+    assert isinstance(info.value, FeishuError), "必须仍是 FeishuError，既有处理逻辑才不受影响"
+
+
+def test_batch_get_records_raises_schema_changed_on_unknown_field():
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        return err(1254045, "FieldNameNotFound", status=200)
+
+    client = make_client(RecordingSession(handler=handler))
+
+    with pytest.raises(SchemaChangedError):
+        client.batch_get_records(BASE, TABLE, ["recA1"], field_names=["姓名"])
+
+
+def test_schema_changed_does_not_trigger_version_fallback():
+    """字段名错误和「新版接口不可用」是两回事，不得触发 v1 回退重试。"""
+    urls: list[str] = []
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        urls.append(url)
+        return err(1254045, "FieldNameNotFound", status=200)
+
+    client = make_client(RecordingSession(handler=handler))
+
+    with pytest.raises(SchemaChangedError):
+        client.search_records(BASE, TABLE, field_names=["姓名"])
+
+    assert len(urls) == 1, "不应重试，也不应回退到旧版接口"
+
+
+def test_search_records_still_passes_through_other_errors():
+    """别的业务错误照旧原样抛出，不被误判成结构变更。"""
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        return err(1254302, "RolePermNotAllow", status=200)
+
+    client = make_client(RecordingSession(handler=handler))
+
+    with pytest.raises(FeishuError) as info:
+        client.search_records(BASE, TABLE, field_names=["姓名"])
+
+    assert not isinstance(info.value, SchemaChangedError)
+    assert info.value.code == 1254302
+
+
+# --------------------------------------------------------------------------
+# 切片 7：限流（真实事故）
+# --------------------------------------------------------------------------
+
+
+def test_rate_limit_reported_as_http_400_is_retried():
+    """⚠️ 真实事故：飞书**旧版接口把限流报成 HTTP 400 + code 99991400**。
+
+    只认 `429 / 5xx` 会直接把这次请求判死 —— 注册表构建期每张活动表一次
+    `list_fields`，一旦被限流，那张表就被静默丢掉，而且注册表要缓存 24 小时。
+    实测连跑三次得到 169 / 165 / 171 张表，正确答案是 171。
+    """
+    slept: list[float] = []
+    state = {"n": 0}
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        state["n"] += 1
+        if state["n"] == 1:
+            return FakeResponse(
+                400,
+                {"code": 99991400, "msg": "request trigger frequency limit"},
+            )
+        return ok({"items": [{"field_id": "fld1", "field_name": "姓名", "type": 1}]})
+
+    client = make_client(RecordingSession(handler=handler), slept)
+
+    fields = client.list_fields(BASE, TABLE)
+
+    assert [f["name"] for f in fields] == ["姓名"]
+    assert len(slept) == 1, "限流必须退避重试，不能直接判死"
+
+
+def test_too_many_request_code_is_retried():
+    """新版多维表格的限流码 1254290 同样要重试。"""
+    slept: list[float] = []
+    state = {"n": 0}
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        state["n"] += 1
+        if state["n"] == 1:
+            return err(1254290, "TooManyRequest", status=200)
+        return ok({"records": [{"record_id": "r1", "fields": {}}]})
+
+    client = make_client(RecordingSession(handler=handler), slept)
+
+    assert [r["record_id"] for r in client.search_records(BASE, TABLE)] == ["r1"]
+    assert len(slept) == 1
+
+
+def test_non_rate_limit_business_error_is_not_retried():
+    """别把普通业务错误也当成限流反复重试 —— 那是拿配额换噪音。"""
+    slept: list[float] = []
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        return err(1254302, "RolePermNotAllow", status=200)
+
+    client = make_client(RecordingSession(handler=handler), slept)
+
+    with pytest.raises(FeishuError):
+        client.list_fields(BASE, TABLE)
+
+    assert slept == []

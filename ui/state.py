@@ -28,6 +28,7 @@ from feishu import BitableClient, FeishuHttpClient
 from feishu.member_query import MemberQueryResult, query_member
 from feishu.models import ActivityRegistry
 from feishu.registry import build_registry
+from services.schema_refresh import with_schema_refresh
 
 DEMO_ENV = "AX_DEMO"
 _NONCE_KEY = "ax_nonce"
@@ -75,15 +76,25 @@ def load_registry(nonce: str) -> ActivityRegistry:
 @st.cache_data(ttl=DEFAULT_MEMBER_TTL, show_spinner=False)
 def run_query(nonce: str, name: str, sid: str) -> MemberQueryResult:
     settings = get_settings()
-    registry = load_registry(nonce)
-    return query_member(
-        get_client(),
-        registry,
-        settings.bases,
-        name,
-        sid,
-        max_workers=settings.max_workers,
-    )
+    client = get_client()
+
+    def run() -> MemberQueryResult:
+        # 每次都在 run 内部取注册表：重建之后这里才能拿到新的那份
+        return query_member(
+            client,
+            load_registry(nonce),
+            settings.bases,
+            name,
+            sid,
+            max_workers=settings.max_workers,
+        )
+
+    def rebuild() -> None:
+        load_registry.clear()
+
+    # 骨干改名或删列之后，缓存了 24 小时的旧字段名会让查询整体失败。
+    # 这里丢掉过时的注册表重试一次，用户端是无感的。
+    return with_schema_refresh(run, rebuild)
 
 
 # --------------------------------------------------------------------------

@@ -36,6 +36,15 @@ _FALLBACK_CODES = {
 }
 _FALLBACK_STATUS = {403, 404, 405, 501}
 
+# 限流。⚠️ 飞书**旧版接口把限流报成 HTTP 400**（不是 429）+ 下面这些 code，
+# 只按状态码判断会把这次请求直接判死。真实事故：注册表构建期每张活动表一次
+# list_fields，被限流的那张表会被静默丢掉，而注册表要缓存 24 小时。
+_RATE_LIMIT_CODES = {
+    99991400,  # request trigger frequency limit
+    99991404,  # 频率限制的另一种报法
+    1254290,   # TooManyRequest（新版多维表格）
+}
+
 
 class FeishuError(RuntimeError):
     """飞书接口返回的业务错误。"""
@@ -59,6 +68,46 @@ class FeishuError(RuntimeError):
         if path:
             detail += f"，接口 {path}"
         super().__init__(detail)
+
+
+# 请求里带了一个不存在的字段名。注册表缓存 24 小时，
+# 骨干一旦改名或删列，缓存里的旧字段名就会踩到这个码。
+SCHEMA_CHANGED_CODE = 1254045
+
+
+class SchemaChangedError(FeishuError):
+    """活动表结构已变（字段被改名或删除），缓存的字段投影已失效。
+
+    调用方应当**重建注册表后重试**（见 :func:`services.schema_refresh.with_schema_refresh`）。
+
+    ⚠️ 绝不允许「把未知字段悄悄丢掉、继续查询」：学时字段一旦被改名，
+    丢掉它的结果就是这一整张表的学时静默变成 0 —— 表面上查得出结果，
+    数字却是错的。宁可报错，也不给错数字。
+    """
+
+
+def _translate_schema_error(exc: FeishuError) -> FeishuError:
+    """把「字段名找不到」翻译成语义化的 :class:`SchemaChangedError`，其余原样返回。"""
+    if exc.code != SCHEMA_CHANGED_CODE:
+        return exc
+    return SchemaChangedError(
+        "活动表结构已变更（字段被改名或删除），缓存的字段投影已过时",
+        code=exc.code,
+        status=exc.status,
+        path=exc.path,
+    )
+
+
+def _raise_translated(exc: FeishuError) -> None:
+    """在 ``except FeishuError`` 块里调用：结构变更错误换成语义化版本再抛，其余原样抛出。
+
+    ⚠️ 字段名找不到属于「数据变了」而不是「接口版本不对」，不会走 v1 回退，
+    所以必须在这里翻译一次，上层才认得出「该重建注册表了」。
+    """
+    translated = _translate_schema_error(exc)
+    if translated is exc:
+        raise exc
+    raise translated from exc
 
 
 class SensitiveFieldError(RuntimeError):
@@ -223,7 +272,7 @@ class FeishuHttpClient:
                 msg = body.get("msg") or f"HTTP {status}"
                 err = FeishuError(msg, code=code, status=status, path=path)
 
-                if status == 429 or 500 <= status < 600:
+                if status == 429 or 500 <= status < 600 or code in _RATE_LIMIT_CODES:
                     last_error = err
                     if attempt >= self._max_retries:
                         raise err
@@ -511,7 +560,10 @@ class FeishuHttpClient:
                     raise
                 return _v1(use_filter=False)
 
-        data = self._try_v3_then_v1(_v3, _v1_safe)
+        try:
+            data = self._try_v3_then_v1(_v3, _v1_safe)
+        except FeishuError as exc:
+            _raise_translated(exc)
         return S.normalize_records(data.get("items") or data)
 
     def batch_get_records(
@@ -559,7 +611,10 @@ class FeishuHttpClient:
 
         # ⚠️ 这条回退是必须的：新版 batch_get 需要 base:record:read，
         # 一旦缺失又不回退，「关联快通道」会整体失效、把所有活动漏掉。
-        data = self._try_v3_then_v1(_v3, _v1)
+        try:
+            data = self._try_v3_then_v1(_v3, _v1)
+        except FeishuError as exc:
+            _raise_translated(exc)
         return S.normalize_records(data.get("items") or data)
 
 

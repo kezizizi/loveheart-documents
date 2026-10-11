@@ -11,7 +11,6 @@ import streamlit as st
 from config import (
     ORG_NAME,
     ORG_SLOGAN,
-    SUPPLEMENT_FORM_URL,
     UNKNOWN_GROUP_LABEL,
 )
 from feishu.member_query import MemberQueryResult
@@ -211,15 +210,7 @@ def _render_result(result: MemberQueryResult, query: tuple[str, str]) -> None:
     as_of = state.data_as_of(nonce)
 
     if not result.found:
-        st.html(
-            components.note(
-                "warn",
-                "小爱同学没有找到你的档案。可能是姓名或学号与入社问卷不一致。<br/>"
-                f'如果你确实加入过爱心社，请<a href="{SUPPLEMENT_FORM_URL}" target="_blank">'
-                "点这里补录信息</a>，补录后即可查到。",
-                html=True,
-            )
-        )
+        st.html(components.not_found_note(result.not_found_reason))
         _render_issues(result)
         return
 

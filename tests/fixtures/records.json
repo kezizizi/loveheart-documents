@@ -139,6 +139,25 @@
           "2025秋金盲杖": {"link_record_ids": ["recJ1"]},
           "2025秋扫雪": {"link_record_ids": ["recK1"]}
         }
+      },
+      {
+        "record_id": "recM25nosid",
+        "created_time": 1725148800000,
+        "fields": {
+          "姓名": [{"text": "赵无号", "type": "text"}],
+          "年级": [{"text": "23本"}],
+          "院系": [{"text": "物理学院"}]
+        }
+      },
+      {
+        "record_id": "recM25only",
+        "created_time": 1725148800000,
+        "fields": {
+          "姓名": [{"text": "钱只二五", "type": "text"}],
+          "学号": 2300018888,
+          "年级": [{"text": "23本"}],
+          "院系": [{"text": "历史学系"}]
+        }
       }
     ],
     "tblB74WxX7708aKd": [

@@ -227,6 +227,12 @@ def test_registry_skips_empty_tables_metadata(specs):
 
 
 def test_registry_isolates_single_table_failure(specs):
+    """单张表探测失败要被隔离，但**必须留下痕迹**。
+
+    这张表被跳过意味着它的活动对所有用户都不可见，而注册表要缓存 24 小时。
+    所以「失败被记录进 registry.errors」不是可选的调试信息，而是
+    「结果可能不完整」的唯一信号 —— `query_member` 会把它透出到页面上。
+    """
     client = build_fixture_client(fail_tables=["tblFAILcandidate001"])
     registry = build_registry(client, specs)
 
@@ -234,7 +240,7 @@ def test_registry_isolates_single_table_failure(specs):
     assert "tblFAILcandidate001" not in ids
     assert "tblp8GDapgvtG4wP" in ids, "单表失败不得影响其他表"
 
-    assert registry.errors, "失败必须被记录"
+    assert registry.errors, "失败必须被记录 —— 这是「数据可能缺失」的唯一信号"
     assert any("某未开放表" in e for e in registry.errors)
 
 

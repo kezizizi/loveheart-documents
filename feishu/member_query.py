@@ -8,6 +8,15 @@
   按姓名关键词扫一遍，再逐条判定。
 
 参与判定优先级：``link record_id`` > ``学号`` > ``姓名``（低置信）。
+
+成员匹配规则（不可放宽）
+------------------------
+**在主表里认人时，姓名和学号必须同时命中**，只看姓名一律不算本人；
+查不到时按 :data:`NOT_FOUND_*` 归因，交给 UI 给出对应的补录引导。
+
+注意别把这条和「参与判定」混淆：判定**某条活动记录**是否属于本人的
+:func:`judge_confidence` 仍然允许「仅姓名」作为最弱证据命中，但会标为低置信 ——
+活动表里确实存在连学号列都没有的表，那时没有更强的证据可用了。
 """
 
 from __future__ import annotations
@@ -18,6 +27,7 @@ from typing import Any, Sequence
 
 from config import MEMBER_READ_WHITELIST
 from feishu import schema as S
+from feishu.client import SchemaChangedError
 from feishu.models import (
     ActivityRegistry,
     ActivityTable,
@@ -43,6 +53,44 @@ CONFIDENCE_HIGH = "high"
 CONFIDENCE_MEDIUM = "medium"
 CONFIDENCE_LOW = "low"
 
+# 查不到的原因。每一种对应 UI 上一句不同的话，都要引导去补录问卷。
+NOT_FOUND_NAME = "name"                # 档案里根本没有这个姓名
+NOT_FOUND_SID = "sid"                  # 姓名在档案里，但配的学号对不上
+NOT_FOUND_SID_MISSING = "sid_missing"  # 姓名在档案里，但那条档案没填学号
+
+# 归因优先级：越靠前越「可行动」。「档案里缺学号」能靠补录直接解决，
+# 所以即使别的库只是「查不到姓名」，也优先报它。
+_REASON_PRIORITY = (NOT_FOUND_SID_MISSING, NOT_FOUND_SID, NOT_FOUND_NAME)
+
+
+def pick_not_found_reason(reasons: Sequence[str | None]) -> str | None:
+    """把各库的归因收敛成一个：按可行动程度取最优。
+
+    一个归因都拿不到时（例如每个库的检索都报错了、压根没查成）返回 ``None``。
+    这种情况下「姓名查不到」是我们编出来的，不如老实说不知道，
+    让 UI 回退到通用提示。
+    """
+    observed = {r for r in reasons if r}
+    for candidate in _REASON_PRIORITY:
+        if candidate in observed:
+            return candidate
+    return None
+
+
+@dataclass(frozen=True)
+class MemberLookup:
+    """某个库内的查找结果。
+
+    ``reason`` 只有在 ``records`` 为空**且确实查过**时才有值；
+    一次都没查成时它是 ``None``（此时 ``errors`` 说明原因）——
+    绝不能把「查不成」伪装成「查无此人」，那会把人引向补录问卷，
+    而真正的问题出在系统这一侧。
+    """
+
+    records: tuple[MemberRecord, ...] = ()
+    reason: str | None = None
+    errors: tuple[str, ...] = ()
+
 
 @dataclass(frozen=True)
 class MemberQueryResult:
@@ -51,6 +99,8 @@ class MemberQueryResult:
     participations: tuple[Participation, ...]
     errors: tuple[str, ...] = ()
     searched_bases: tuple[str, ...] = ()
+    #: 仅在 ``found is False`` 时有值，取值见 ``NOT_FOUND_*``
+    not_found_reason: str | None = None
 
     @property
     def low_confidence_count(self) -> int:
@@ -86,6 +136,21 @@ def _find_key(fields: dict[str, Any], needle: str) -> str | None:
     return None
 
 
+def _row_identity(fields: dict[str, Any]) -> tuple[str, str]:
+    """取出一行的（姓名, 学号）原文。
+
+    真实表里这两个字段可能带前缀（26-27 活动表里叫「您的学号」），
+    所以先按精确名取，取不到再按子串找。
+    """
+    name = S.cell_text(fields.get("姓名")) or S.cell_text(
+        fields.get(_find_key(fields, "姓名") or "")
+    )
+    sid = S.cell_text(fields.get("学号")) or S.cell_text(
+        fields.get(_find_key(fields, "学号") or "")
+    )
+    return name, sid
+
+
 # --------------------------------------------------------------------------
 # 找主表记录
 # --------------------------------------------------------------------------
@@ -101,12 +166,7 @@ def _rows_to_members(
     out: list[MemberRecord] = []
     for row in rows:
         fields = row.get("fields") or {}
-        row_name = S.cell_text(fields.get("姓名")) or S.cell_text(
-            fields.get(_find_key(fields, "姓名") or "")
-        )
-        row_sid = S.cell_text(fields.get("学号")) or S.cell_text(
-            fields.get(_find_key(fields, "学号") or "")
-        )
+        row_name, row_sid = _row_identity(fields)
         if not names_equal(row_name, name):
             continue
         if not sids_equal(row_sid, sid):
@@ -135,14 +195,20 @@ def _rows_to_members(
     return out
 
 
-def find_member_records(
+def lookup_member(
     client: BitableClient,
     spec: Any,
     registry: ActivityRegistry,
     name: str,
     sid: str,
-) -> list[MemberRecord]:
-    """在某一个库里找出该人的主表记录（可能多条）。"""
+) -> MemberLookup:
+    """在某一个库里找出该人的主表记录（可能多条），并归因查不到的原因。
+
+    **姓名与学号必须同时命中**才算本人，只看姓名一律不算。
+
+    诊断复用本次两次检索的结果，**不额外发请求** —— 飞书 API 有月度配额，
+    查不到时再多打几枪是拿配额换一句提示语，不划算。
+    """
     projection = main_projection(registry, spec)
     link_names = {
         t.main_link_field
@@ -150,11 +216,20 @@ def find_member_records(
         if t.main_link_field
     }
 
-    attempts: list[tuple[str, list[str]]] = [(name, ["姓名"])]
-    # 兜底：万一姓名有异体字 / 关键词语义检索不中，再用学号搜一次
-    attempts.append((str(normalize_sid(sid)), ["学号"]))
+    # (检索关键词, 检索字段, 这一趟是不是「按姓名」)
+    attempts: list[tuple[str, list[str], bool]] = [
+        (name, ["姓名"], True),
+        # 兜底：万一姓名有异体字 / 关键词语义检索不中，再用学号搜一次
+        (str(normalize_sid(sid)), ["学号"], False),
+    ]
 
-    for keyword, search_fields in attempts:
+    saw_name = False
+    saw_name_without_sid = False
+    # 检索本身有没有成功过。一次都没成功就不能做归因。
+    searched = False
+    search_errors: list[str] = []
+
+    for keyword, search_fields, by_name in attempts:
         if not keyword:
             continue
         try:
@@ -166,13 +241,41 @@ def find_member_records(
                 search_fields=search_fields,
                 automatic_fields=True,
             )
-        except Exception:  # noqa: BLE001 - 单条兜底路径失败不算致命
+        except SchemaChangedError:
+            # 表结构变了：必须让上层知道（要重建注册表再试），
+            # 绝不能当成「这条兜底路径失败」吞掉。
+            raise
+        except Exception as exc:  # noqa: BLE001 - 单条兜底路径失败不算致命
+            search_errors.append(f"[{spec.label}] 检索主表失败：{exc}")
             continue
+        searched = True
+
         matched = _rows_to_members(rows, spec, link_names, name, sid)
         if matched:
-            return matched
+            return MemberLookup(records=tuple(matched))
 
-    return []
+        if not by_name:
+            continue
+        for row in rows:
+            row_name, row_sid = _row_identity(row.get("fields") or {})
+            if not names_equal(row_name, name):
+                continue
+            saw_name = True
+            if not normalize_sid(row_sid):
+                saw_name_without_sid = True
+
+    failures = tuple(search_errors)
+    if not searched:
+        return MemberLookup(records=(), reason=None, errors=failures)
+
+    if saw_name_without_sid:
+        # 姓名对上了，但那一条档案没有学号 —— 只能靠补录解决
+        reason = NOT_FOUND_SID_MISSING
+    elif saw_name:
+        reason = NOT_FOUND_SID
+    else:
+        reason = NOT_FOUND_NAME
+    return MemberLookup(records=(), reason=reason, errors=failures)
 
 
 # --------------------------------------------------------------------------
@@ -316,7 +419,16 @@ def collect_participations(
     *,
     max_workers: int = 8,
 ) -> tuple[list[Participation], list[str]]:
-    """并发采集该人的全部活动参与记录。单表失败被隔离。"""
+    """并发采集该人的全部活动参与记录。单表失败被隔离。
+
+    🚩 **红线：遍历范围恒等于 ``member.base_keys``，永远不要扩大。**
+    活动表扫描是整条查询里最贵的一步（每个库几十上百张表各一次请求），
+    而飞书 API 调用量有月度上限。历史上曾出现「顺手改成扫全部库」的想法，
+    理由是「多扫一点结果更全」—— 那不是优化，是把配额烧光。
+    只在某个库有主表记录的人，就不该去碰另一个库的活动表。
+    ``tests/test_member_query.py::test_collect_participations_never_widens_scope``
+    是这条红线的守卫测试。
+    """
     tables = [t for key in member.base_keys for t in registry.tables_of(key)]
     if not tables:
         return [], []
@@ -344,6 +456,10 @@ def collect_participations(
             table = futures[future]
             try:
                 participations.extend(future.result())
+            except SchemaChangedError:
+                # 结构变更不是「这一张表读不到」，而是整份注册表都过时了。
+                # 必须穿透隔离抛上去，让上层重建注册表后重试。
+                raise
             except Exception as exc:  # noqa: BLE001 - 单表失败隔离
                 errors.append(f"读取活动「{table.name}」失败：{exc}")
 
@@ -374,12 +490,19 @@ def query_member(
     errors: list[str] = list(registry.errors)
     searched: list[str] = []
 
+    reasons: list[str | None] = []
     for spec in specs:
         searched.append(spec.key)
         try:
-            records.extend(find_member_records(client, spec, registry, name, sid))
+            look = lookup_member(client, spec, registry, name, sid)
+        except SchemaChangedError:
+            raise
         except Exception as exc:  # noqa: BLE001
             errors.append(f"查询 {spec.label} 主表失败：{exc}")
+            continue
+        reasons.append(look.reason)
+        records.extend(look.records)
+        errors.extend(look.errors)
 
     if not records:
         return MemberQueryResult(
@@ -388,6 +511,7 @@ def query_member(
             participations=(),
             errors=tuple(errors),
             searched_bases=tuple(searched),
+            not_found_reason=pick_not_found_reason(reasons),
         )
 
     member = merge_members(records)
