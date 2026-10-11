@@ -71,12 +71,16 @@ def test_resolve_group_prefers_topmost_known_department():
 
 def test_resolve_group_substring_matches_renamed_folders():
     assert resolve_group(["组织部", "组织部25秋"]) == "组织部"
-    # 顶层文件夹名不在部组清单里时，退回该文件夹名本身（如专项工作流）
-    assert resolve_group(["2025秋活动记录"]) == "2025秋活动记录"
 
 
-def test_resolve_group_falls_back_to_top_folder():
-    assert resolve_group(["1+n第二期"]) == "1+n第二期"
+def test_resolve_group_rejects_unrecognised_folder():
+    """不是部组的文件夹名不许冒充部组。
+
+    「1+n第二期」是专项工作流的文件夹，之前会被当成部组，与 9 个真部组
+    并排出现在「参与浓度」里 —— 那不是部组，不该占一个标签位。
+    """
+    assert resolve_group(["1+n第二期"]) is None
+    assert resolve_group(["2025秋活动记录"]) is None
     assert resolve_group([]) is None
 
 
@@ -164,7 +168,8 @@ def test_registry_group_comes_from_folder_not_questionnaire(specs):
     assert by_id["tblcaPosQ1bDsFbE"].group == "儿童部"
     assert by_id["tblB74WxX7708aKd"].group == "无障碍部"
     assert by_id["tblzVoQoJQUAbjLi"].group == "组织部"
-    assert by_id["tblhnwSMlvHsm5RE"].group == "1+n第二期"
+    # 「1+n第二期」是专项工作流的文件夹，不是部组 —— 不该占一个部组标签位
+    assert by_id["tblhnwSMlvHsm5RE"].group is None
 
 
 def test_registry_term_is_resolved(specs):
@@ -356,3 +361,52 @@ def test_sensitive_fields_excluded_from_safe_projection(specs):
     assert "姓名" in table.safe_fields
     assert "志愿学时" in table.safe_fields
     assert not (set(table.safe_fields) & SENSITIVE_FIELDS)
+
+
+# --------------------------------------------------------------------------
+# 超长字段名：不能进请求投影（真实事故）
+# --------------------------------------------------------------------------
+
+
+PROSE_FIELD = (
+    "本学期日常工作的学时将在寒假统一发放，届时会有人联系同学拉群，"
+    "需要扫二维码加入志愿北京项目才能记录时长，请务必关注哦！"
+)
+
+
+def test_safe_fields_excludes_over_long_names(specs):
+    """⚠️ 超长字段名进了请求投影，飞书会拒掉**整个请求**，整表数据全丢。
+
+    真实触发源：有人把问卷题干当成了列名。fixture 里 26秋-安宁疗护 就带一个。
+    """
+    client = build_fixture_client()
+    registry = build_registry(client, specs)
+    table = registry.by_table_id()["tblp8GDapgvtG4wP"]
+
+    assert PROSE_FIELD not in table.safe_fields, "超长字段名不得进入请求投影"
+    assert "姓名" in table.safe_fields, "其余字段照常保留"
+
+    # 反过来验证：真的发出去的投影里也不许出现它
+    for _op, _tid, names in client.projections:
+        assert PROSE_FIELD not in names
+
+
+def test_hours_detection_skips_over_long_names():
+    """万一有人把「学时」写进超长列名，宁可漏掉这个字段，也不能打挂整张表。"""
+    from feishu.registry import detect_hours_fields
+
+    fields = [
+        {"name": "志愿时长", "type": 2},
+        {"name": PROSE_FIELD, "type": 2},  # 含「学时」且是数字字段，但名字太长
+    ]
+    assert detect_hours_fields(fields) == ("志愿时长",)
+
+
+def test_time_detection_skips_over_long_names():
+    from feishu.registry import detect_time_fields
+
+    fields = [
+        {"name": "参与时间", "type": 5},
+        {"name": PROSE_FIELD + "的参与时间", "type": 5},
+    ]
+    assert detect_time_fields(fields) == ("参与时间",)

@@ -9,6 +9,22 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from config import MAX_REQUESTABLE_FIELD_NAME_CHARS
+
+
+def is_requestable_field_name(name: Any) -> bool:
+    """这个字段名能不能安全地放进请求投影。
+
+    飞书对 ``field_names`` 里的字段名有长度上限，超了会**拒掉整个请求**
+    （``field validation failed``，code 99992402），而不是忽略那一个字段 ——
+    结果是整张表的数据一条都拿不到。真实触发源是有人把问卷题干当成了列名。
+
+    调用方据此在**发请求之前**把这类名字剔掉。
+    """
+    if not isinstance(name, str) or not name:
+        return False
+    return len(name) <= MAX_REQUESTABLE_FIELD_NAME_CHARS
+
 
 def safe_int(value: Any) -> int | None:
     """宽松转 int，失败返回 None。"""

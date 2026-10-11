@@ -99,7 +99,7 @@ def render_app() -> None:
     theme.inject_theme()
     render_sidebar()
 
-    st.html(
+    _html(
         components.hero(
             "爱心足迹",
             "看看你在爱心社走过的路——每一场活动、每一个小时，都被认真记下来。",
@@ -112,7 +112,7 @@ def render_app() -> None:
 
     error = st.session_state.pop(_ERROR_KEY, None)
     if error:
-        st.html(
+        _html(
             components.note(
                 "error",
                 "查询过程中出错了，请稍后重试。如果一直失败，请联系技术负责人反馈。<br/>"
@@ -184,7 +184,7 @@ def _handle_submit(clicked: bool, name: str, sid: str) -> None:
 
     flash = st.session_state.pop(_FLASH_KEY, None)
     if flash:
-        st.html(components.note("warn", flash))
+        _html(components.note("warn", flash))
 
 
 def _execute(query: tuple[str, str]) -> MemberQueryResult | None:
@@ -209,7 +209,7 @@ def _render_result(result: MemberQueryResult, query: tuple[str, str]) -> None:
     as_of = state.data_as_of()
 
     if not result.found:
-        st.html(components.not_found_note(result.not_found_reason))
+        _html(components.not_found_note(result.not_found_reason))
         _render_issues(result)
         return
 
@@ -224,7 +224,7 @@ def _render_result(result: MemberQueryResult, query: tuple[str, str]) -> None:
         for k in member.base_keys
     ]
 
-    st.html(
+    _html(
         components.result_header(
             member.name,
             join_label=join_label,
@@ -241,10 +241,17 @@ def _render_result(result: MemberQueryResult, query: tuple[str, str]) -> None:
 
     _render_issues(result)
 
+    if footprint.activity_count == 0:
+        # 一条活动记录都没有：时间轴、CSV、海报全都无从谈起。
+        # 与其摆一排 0（并且 old 代码会在这里抛 st.html 空 body 把整页打挂），
+        # 不如给一句话，顺手指个方向。
+        _html(components.empty_footprint_note())
+        return
+
     # ---- 参与浓度 ----
-    st.html(components.section("参与浓度"))
+    _html(components.section("参与浓度"))
     breakdown = group_breakdown(result.participations)
-    st.html(
+    _html(
         components.metric_row(
             [
                 ("足迹部组", str(len(footprint.groups))),
@@ -253,29 +260,29 @@ def _render_result(result: MemberQueryResult, query: tuple[str, str]) -> None:
             ]
         )
     )
-    st.html(components.group_pills(footprint.groups))
+    _html(components.group_pills(footprint.groups))
     if footprint.count_by_term:
-        st.html(components.term_chips(footprint.count_by_term))
+        _html(components.term_chips(footprint.count_by_term))
     _render_partners(result, member)
 
     # ---- 时间轴 ----
-    st.html(
+    _html(
         components.section(
             "爱心足迹",
             f"共 {footprint.activity_count} 条记录，按时间排列",
         )
     )
-    st.html(components.timeline(footprint.timeline))
+    _html(components.timeline(footprint.timeline))
 
     # ---- 导出与分享 ----
-    st.html(components.section("带走这份足迹"))
+    _html(components.section("带走这份足迹"))
     _render_tools(result, member, footprint, membership, as_of)
 
 
 def _render_issues(result: MemberQueryResult) -> None:
     if result.errors:
         lines = "<br/>".join(f"· {components.esc(e)}" for e in result.errors[:6])
-        st.html(
+        _html(
             components.note(
                 "warn",
                 f"有 {len(result.errors)} 处数据没能取到，结果可能不完整：<br/>{lines}",
@@ -283,7 +290,7 @@ def _render_issues(result: MemberQueryResult) -> None:
             )
         )
     if result.low_confidence_count:
-        st.html(
+        _html(
             components.note(
                 "info",
                 f"有 {result.low_confidence_count} 条记录只凭姓名匹配、缺乏更硬的证据"
@@ -313,10 +320,10 @@ def _render_partners(result: MemberQueryResult, member) -> None:
         if cached is not None:
             count, truncated = cached
             if count is None:
-                st.html(components.note("info", "暂时没能统计出同行伙伴。"))
+                _html(components.note("info", "暂时没能统计出同行伙伴。"))
             else:
                 suffix = "（仅统计了最近若干场活动）" if truncated else ""
-                st.html(
+                _html(
                     components.metric_row([("曾与你同场活动的伙伴", f"{count} 位")])
                     + components.note("info", f"这些人和你在同一场活动里出过勤{suffix}。")
                 )
@@ -385,8 +392,19 @@ def _build_csv(member, participations) -> bytes:
     return buffer.getvalue().encode("utf-8-sig")
 
 
+def _html(markup: str) -> None:
+    """渲染一段 HTML；空串直接跳过。
+
+    ⚠️ Streamlit 对空 body 会抛 ``st.html body cannot be empty``，把整页打挂。
+    组件在「无事可画」时习惯返回空串（例如一个部组标签都没有时 group_pills 返回 ""），
+    所以统一在这里兜住 —— 这是本模块唯一的 st.html 出口。
+    """
+    if markup and markup.strip():
+        st.html(markup)
+
+
 def _render_footer() -> None:
-    st.html(
+    _html(
         components.footnote(
             [
                 f"{ORG_NAME} · {ORG_SLOGAN}",

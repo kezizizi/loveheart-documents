@@ -87,6 +87,21 @@ def not_found_note(reason: str | None) -> str:
     )
 
 
+def empty_footprint_note() -> str:
+    """找到了档案、但一条活动记录都没有时的提示。
+
+    这时没有东西可以画时间轴，也导不出 CSV 和海报 —— 与其让页面报错或者
+    干巴巴地摆三个 0，不如把话说清楚，顺手指个方向。
+    """
+    return note(
+        "empty",
+        "档案找到了，但还没有查到任何活动记录，"
+        "所以暂时生成不了记录表和分享海报。<br/>"
+        "爱心社的活动全年都有 —— 挑一场参加，这里就会长出一整页行程表来。",
+        html=True,
+    )
+
+
 def section(title: str, note_text: str = "") -> str:
     tail = (
         f'<span class="ax-section-note">{esc(note_text)}</span>' if note_text else ""

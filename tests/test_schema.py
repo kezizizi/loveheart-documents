@@ -115,3 +115,29 @@ def test_normalize_record_reads_created_time():
     assert record["record_id"] == "rec1"
     assert record["created_time_ms"] == 1757433600000
     assert record["fields"] == {"姓名": "张三"}
+
+
+# --------------------------------------------------------------------------
+# 字段名长度：⚠️ 真实事故
+# --------------------------------------------------------------------------
+
+
+def test_over_long_field_name_is_not_requestable():
+    """⚠️ 真实事故：请求投影里带超长字段名，飞书会**拒掉整个请求**
+    （field validation failed，code 99992402），那张表的数据一条都拿不到。
+
+    实测阈值：50 字符通过，55 字符被拒。
+    """
+    assert S.is_requestable_field_name("志愿时长") is True
+    assert S.is_requestable_field_name("测" * 50) is True
+    assert S.is_requestable_field_name("测" * 51) is False
+
+    # 真实触发源：问卷题干被当成了列名，59 字符
+    prose = "本学期日常工作的学时将在寒假统一发放，届时会有人联系同学拉群，需要扫二维码加入志愿北京项目才能记录时长"
+    assert S.is_requestable_field_name(prose) is False
+
+
+def test_requestable_predicate_rejects_empty_and_non_string():
+    assert S.is_requestable_field_name("") is False
+    assert S.is_requestable_field_name(None) is False
+    assert S.is_requestable_field_name(123) is False

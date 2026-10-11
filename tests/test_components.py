@@ -206,3 +206,39 @@ def test_not_found_note_asks_to_recheck_sid_when_mismatched():
 def test_not_found_note_survives_unknown_reason():
     html = components.not_found_note("某个没定义过的原因")
     assert config.SUPPLEMENT_FORM_URL in html
+
+
+# --------------------------------------------------------------------------
+# 零活动记录：不能把整页打挂
+# --------------------------------------------------------------------------
+
+
+def test_group_pills_returns_empty_string_when_no_groups():
+    """这就是零活动记录时打挂整页的源头：一个部组标签都没有时返回空串，
+    而 ``st.html("")`` 会抛 ``st.html body cannot be empty``。
+    """
+    assert components.group_pills([]) == ""
+
+
+def test_html_guard_skips_empty_markup(monkeypatch):
+    """所有 st.html 都走 _html 这个出口，空串在那里被挡掉。"""
+    from ui import pages
+
+    rendered: list[str] = []
+    monkeypatch.setattr(pages.st, "html", lambda markup: rendered.append(markup))
+
+    pages._html("")
+    pages._html("   ")
+    pages._html(None)  # type: ignore[arg-type]
+    assert rendered == [], "空内容必须被跳过，不能传给 st.html"
+
+    pages._html("<b>有内容</b>")
+    assert rendered == ["<b>有内容</b>"]
+
+
+def test_empty_footprint_note_is_warm_and_actionable():
+    html = components.empty_footprint_note()
+    assert html.strip()
+    assert "活动" in html
+    # 说清楚「为什么没有东西可看」，并给个方向
+    assert "海报" in html or "记录表" in html

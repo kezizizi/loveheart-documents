@@ -9,9 +9,11 @@ from PIL import Image
 
 from feishu.models import Footprint, MembershipDate, TimelineItem
 from services.poster import (
-    POSTER_HEIGHT,
+    POSTER_MIN_HEIGHT,
     POSTER_WIDTH,
+    TIMELINE_ROW_H,
     poster_file_name,
+    poster_height,
     render_poster,
 )
 
@@ -48,50 +50,73 @@ def _open(data: bytes) -> Image.Image:
     return Image.open(io.BytesIO(data))
 
 
-def test_poster_is_valid_png_with_expected_size():
+def _render(footprint: Footprint, name: str = "张三") -> Image.Image:
     data = render_poster(
-        name="张三",
-        footprint=_sample_footprint(),
+        name=name,
+        footprint=footprint,
         membership=MembershipDate(
             date_ms=1_696_032_000_000, source="入社日期字段", is_estimated=False
         ),
         data_as_of=date(2026, 10, 11),
     )
-
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
-    assert len(data) > 10_000
+    return _open(data)
 
-    with _open(data) as img:
-        assert img.size == (POSTER_WIDTH, POSTER_HEIGHT)
+
+# --------------------------------------------------------------------------
+# 画幅：随活动数生长，但绝不缩水、绝不截断
+# --------------------------------------------------------------------------
+
+
+def test_short_poster_keeps_minimum_height():
+    """活动少的社员，画幅不小于基准尺寸 —— 版式不缩水。"""
+    assert poster_height(_sample_footprint(n_items=3)) == POSTER_MIN_HEIGHT
+    assert poster_height(_sample_footprint(n_items=0)) == POSTER_MIN_HEIGHT
+
+
+def test_poster_height_grows_so_every_activity_fits():
+    """活动多的社员，画幅必须变长，把每一条都画下。"""
+    few = poster_height(_sample_footprint(n_items=3))
+    many = poster_height(_sample_footprint(n_items=40))
+
+    assert many > POSTER_MIN_HEIGHT
+    assert many > few
+
+
+def test_height_is_linear_in_activity_count():
+    """每多一条活动就多一行 —— 证明是「全都画下」，而不是挑着画。
+
+    如果还留着「画不下就截断」的逻辑，这个等式就不成立。
+    """
+    ten = poster_height(_sample_footprint(n_items=10))
+    twenty = poster_height(_sample_footprint(n_items=20))
+
+    assert twenty - ten == 10 * TIMELINE_ROW_H
+
+
+def test_rendered_height_matches_computed_height():
+    for n_items in (3, 12, 40):
+        footprint = _sample_footprint(n_items=n_items)
+        with _render(footprint) as img:
+            assert img.size == (POSTER_WIDTH, poster_height(footprint))
 
 
 def test_poster_renders_with_empty_footprint():
-    data = render_poster(
-        name="新社员",
-        footprint=Footprint(
-            total_hours=0.0,
-            activity_count=0,
-            distinct_activity_count=0,
-            groups=(),
-            timeline=(),
-        ),
-        membership=MembershipDate(date_ms=None, source="未记录", is_estimated=True),
+    footprint = Footprint(
+        total_hours=0.0,
+        activity_count=0,
+        distinct_activity_count=0,
+        groups=(),
+        timeline=(),
     )
-    with _open(data) as img:
-        assert img.size == (POSTER_WIDTH, POSTER_HEIGHT)
+    with _render(footprint, name="新社员") as img:
+        assert img.size == (POSTER_WIDTH, POSTER_MIN_HEIGHT)
 
 
 def test_poster_survives_long_names_and_many_items():
-    data = render_poster(
-        name="欧阳娜娜娜娜娜娜娜娜娜娜",
-        footprint=_sample_footprint(n_items=25, long_name=True),
-        membership=MembershipDate(
-            date_ms=1_700_000_000_000, source="估算", is_estimated=True
-        ),
-        subtitle="23秋以前入社",
-    )
-    with _open(data) as img:
-        assert img.size == (POSTER_WIDTH, POSTER_HEIGHT)
+    footprint = _sample_footprint(n_items=25, long_name=True)
+    with _render(footprint, name="欧阳娜娜娜娜娜娜娜娜娜娜") as img:
+        assert img.size == (POSTER_WIDTH, poster_height(footprint))
 
 
 def test_poster_file_name_is_sanitized():

@@ -14,6 +14,7 @@ from feishu.client import (
     SensitiveFieldError,
     assert_names_allowed,
     project,
+    usable_names,
 )
 from tests.conftest import FakeResponse, RecordingSession, err, ok
 
@@ -477,3 +478,64 @@ def test_non_rate_limit_business_error_is_not_retried():
         client.list_fields(BASE, TABLE)
 
     assert slept == []
+
+
+# --------------------------------------------------------------------------
+# 切片 8：超长字段名（真实事故）
+# --------------------------------------------------------------------------
+
+
+PROSE_FIELD = (
+    "本学期日常工作的学时将在寒假统一发放，届时会有人联系同学拉群，"
+    "需要扫二维码加入志愿北京项目才能记录时长，请务必关注哦！"
+)
+
+
+def test_over_long_field_name_is_dropped_from_projection():
+    """⚠️ 请求里带超长字段名会让飞书拒掉**整个请求**，整张表的数据全丢。
+
+    所以要在 API 边界把它剔掉，而不是让调用方自己记得别传。
+    """
+    seen: list[dict] = []
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        seen.append(kwargs.get("json") or {})
+        return ok({"items": [{"record_id": "r1", "fields": {"姓名": [{"text": "张三"}]}}]})
+
+    client = make_client(RecordingSession(handler=handler))
+    rows = client.search_records(BASE, TABLE, field_names=["姓名", PROSE_FIELD])
+
+    assert [r["record_id"] for r in rows] == ["r1"]
+    assert seen[0]["field_names"] == ["姓名"], "超长字段名必须被剔掉，其余照常请求"
+
+
+def test_projection_is_never_dropped_entirely():
+    """投影全被剔掉时，绝不能退化成「不带 field_names」—— 那会拉回全部字段、
+    越过隐私边界。这里宁可报错。"""
+    client = make_client(RecordingSession(handler=lambda *a, **k: ok({})))
+
+    with pytest.raises(FeishuError):
+        client.search_records(BASE, TABLE, field_names=[PROSE_FIELD])
+
+
+def test_batch_get_drops_over_long_field_name():
+    seen: list[dict] = []
+
+    def handler(method: str, url: str, kwargs: dict):
+        if "tenant_access_token" in url:
+            return token_ok()
+        seen.append(kwargs.get("json") or {})
+        return ok({"items": [{"record_id": "r1", "fields": {}}]})
+
+    client = make_client(RecordingSession(handler=handler))
+    client.batch_get_records(BASE, TABLE, ["r1"], field_names=["姓名", PROSE_FIELD])
+
+    assert seen[0]["field_names"] == ["姓名"]
+
+
+def test_usable_names_passes_through_normal_names():
+    assert usable_names(["姓名", "学号"]) == ["姓名", "学号"]
+    assert usable_names(None) is None
+    assert usable_names([]) is None

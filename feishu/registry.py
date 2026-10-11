@@ -20,6 +20,7 @@ from config import (
     FORBIDDEN_TABLE_IDS,
     GROUP_COLORS,
     HOURS_RE,
+    MAX_REQUESTABLE_FIELD_NAME_CHARS,
     NON_ACTIVITY_LINK_FIELDS,
     NON_ACTIVITY_TABLE_NAME_PATTERNS,
     SENSITIVE_FIELDS,
@@ -64,8 +65,11 @@ def folder_path_of(
 def resolve_group(folder_path: Sequence[str]) -> str | None:
     """由文件夹层级推导部组。
 
-    优先精确命中已知部组名；其次做子串匹配（如「组织部26春」）；
-    都不命中时退回最外层文件夹名（如「1+n第二期」这类专项）。
+    优先精确命中已知部组名；其次做子串匹配（如「组织部26春」）。
+
+    都不命中时**返回 None**，不再拿最外层文件夹名顶替 —— 那会让
+    「1+n第二期」这类专项工作流的文件夹伪装成部组，和 9 个真部组并排显示。
+    认不出来的活动统一归入「其他」。
     """
     for name in folder_path:
         if name in GROUP_COLORS:
@@ -74,7 +78,7 @@ def resolve_group(folder_path: Sequence[str]) -> str | None:
         for group in GROUP_COLORS:
             if group in name:
                 return group
-    return folder_path[0] if folder_path else None
+    return None
 
 
 def resolve_term(folder_path: Sequence[str], table_name: str) -> str | None:
@@ -91,12 +95,23 @@ def resolve_term(folder_path: Sequence[str], table_name: str) -> str | None:
 # --------------------------------------------------------------------------
 
 
+def _requestable(field: dict[str, Any]) -> bool:
+    """这张表的这个字段，名字是否短到能放进请求投影。
+
+    超长字段名会让飞书拒掉**整个请求**，于是整张表的数据都拿不到。
+    所以凡是「要拿去请求」的字段名，都必须先过这一关。
+    """
+    return S.is_requestable_field_name(field.get("name"))
+
+
 def detect_hours_fields(fields: Sequence[dict[str, Any]]) -> tuple[str, ...]:
     """识别学时字段。字段名不统一（志愿时长 / 志愿学时 / 工时），靠正则兜。"""
     return tuple(
         f["name"]
         for f in fields
-        if f.get("type") == FIELD_TYPE_NUMBER and HOURS_RE.search(f.get("name") or "")
+        if f.get("type") == FIELD_TYPE_NUMBER
+        and HOURS_RE.search(f.get("name") or "")
+        and _requestable(f)
     )
 
 
@@ -107,6 +122,7 @@ def detect_time_fields(fields: Sequence[dict[str, Any]]) -> tuple[str, ...]:
         for f in fields
         if f.get("type") == FIELD_TYPE_DATETIME
         and TIME_RE.search(f.get("name") or "")
+        and _requestable(f)
     ]
 
     def rank(name: str) -> tuple[int, int]:
@@ -209,10 +225,15 @@ def _probe_one(
 
     has_sid, has_name = detect_identity_fields(fields)
     folder_path = folder_path_of(block.get("parent_id"), index)
+    # 请求投影里只放「一定不会把整张表打挂」的字段名（超长名会被接口拒，
+    # 见 config.MAX_REQUESTABLE_FIELD_NAME_CHARS）。同时也是入站白名单，
+    # 敏感字段在注册表阶段就被剔掉。
     safe_fields = tuple(
         f.get("name")
         for f in fields
-        if f.get("name") and f.get("name") not in SENSITIVE_FIELDS
+        if f.get("name")
+        and f.get("name") not in SENSITIVE_FIELDS
+        and _requestable(f)
     )
 
     return ActivityTable(
@@ -273,6 +294,17 @@ def build_registry(
             (spec.key, tuple(f.get("name") or "" for f in main_fields if f.get("name")))
         )
         main_link_index = build_main_link_index(main_fields, spec.main_table_id)
+        long_links = sorted(
+            n for n in main_link_index.values() if not S.is_requestable_field_name(n)
+        )
+        if long_links:
+            # 关联列名字过长 → 它进不了主表投影 → 这些活动的「关联快通道」失效，
+            # 只能退化为逐表扫描。说出来，别让用户以为数据是完整的。
+            errors.append(
+                f"[{spec.label}] 有 {len(long_links)} 个活动关联列名字超过 "
+                f"{MAX_REQUESTABLE_FIELD_NAME_CHARS} 字，接口不接受，"
+                f"相关活动将退化为逐表扫描：{long_links[:3]}"
+            )
 
         candidates = [b for b in blocks if _is_candidate_table(b, spec)]
         if not candidates:

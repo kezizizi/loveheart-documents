@@ -150,6 +150,17 @@ def project(fields: dict[str, Any], allow: Sequence[str] | None) -> dict[str, An
     return out
 
 
+def usable_names(names: Sequence[str] | None) -> list[str] | None:
+    """剔掉接口不接受的名字，返回可安全放进请求投影的列表。
+
+    ⚠️ 超长字段名会让飞书**拒掉整个请求**（``field validation failed``），
+    而不是忽略那一个字段。在 API 边界统一拦掉，任何调用方都踩不到。
+    """
+    if not names:
+        return None
+    return [n for n in names if S.is_requestable_field_name(n)]
+
+
 # --------------------------------------------------------------------------
 # 客户端
 # --------------------------------------------------------------------------
@@ -471,8 +482,12 @@ class FeishuHttpClient:
         automatic_fields: bool = False,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        allow = list(field_names) if field_names else None
-        assert_names_allowed(allow)
+        assert_names_allowed(field_names)
+        allow = usable_names(field_names)
+        if field_names and not allow:
+            # 投影里的名字全被剔掉了。绝不能退化成「不带 field_names」——
+            # 那会让接口返回**全部字段**，越过隐私边界。
+            raise FeishuError("字段投影全部不可用（字段名过长），拒绝拉取全部字段")
         self.projections.append(("search_records", table_id, tuple(allow or ())))
 
         def _payload(offset: int) -> dict[str, Any]:
@@ -574,8 +589,10 @@ class FeishuHttpClient:
         *,
         field_names: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
-        allow = list(field_names) if field_names else None
-        assert_names_allowed(allow)
+        assert_names_allowed(field_names)
+        allow = usable_names(field_names)
+        if field_names and not allow:
+            raise FeishuError("字段投影全部不可用（字段名过长），拒绝拉取全部字段")
         self.projections.append(("batch_get_records", table_id, tuple(allow or ())))
         ids = [r for r in record_ids if r]
         if not ids:

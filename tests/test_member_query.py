@@ -480,3 +480,36 @@ def test_query_member_survives_one_base_unreadable(specs):
     assert "2025秋金盲杖" in names
     assert "26秋-安宁疗护" not in names
     assert any("26-27" in e for e in result.errors)
+
+
+def test_main_projection_drops_over_long_link_field(specs):
+    """⚠️ 主表投影里带超长关联列名，会让**整个主表查询**失败 —— 那时一个人都找不到。
+
+    宁可少一条关联通道（退化为逐表扫描），也不能让查询整体挂掉。
+    """
+    from feishu.member_query import main_projection
+    from feishu.models import ActivityRegistry, ActivityTable
+
+    long_link = (
+        "本学期日常工作的学时将在寒假统一发放，届时会有人联系同学拉群，"
+        "需要扫二维码加入志愿北京项目才能记录时长：" + "关联问卷"
+    )
+    table = ActivityTable(
+        base_key="base_26_27",
+        base_token=BASE_26_27,
+        table_id="tblOverLong",
+        name="某活动",
+        link_field="社员档案",
+        main_link_field=long_link,
+    )
+    registry = ActivityRegistry(
+        tables=(table,),
+        built_at=0.0,
+        main_fields=(("base_26_27", ("姓名", "学号")),),
+    )
+    spec = next(s for s in specs if s.key == "base_26_27")
+
+    projection = main_projection(registry, spec)
+
+    assert "姓名" in projection and "学号" in projection
+    assert long_link not in projection, "超长关联列名不得进入主表投影"

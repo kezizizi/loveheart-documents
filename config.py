@@ -42,6 +42,12 @@ SUPPLEMENT_FORM_URL: Final = (
     "https://acngyried1he.feishu.cn/share/base/form/shrcnVbvETHWKfha6F4bP9b2Idb"
 )
 
+# 请求投影（field_names）里带超长字段名会被飞书**直接拒掉整个请求**
+# （field validation failed，code 99992402，HTTP 400），于是那张表的数据一条都拿不到。
+# 实测：50 字符通过，55 字符被拒。
+# 真实触发源：有人把问卷题干当成了列名，最长的一条 78 字符。
+MAX_REQUESTABLE_FIELD_NAME_CHARS: Final = 50
+
 BRAND_CRIMSON: Final = "#81021F"        # 栏图底色，主品牌色
 BRAND_CRIMSON_DEEP: Final = "#5E0116"   # 深一档，用于 hover / 渐变收尾
 CREAM_GOLD: Final = "#F9F6E5"           # 栏图上的奶油色，深底上的文字用它

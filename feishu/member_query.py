@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Iterable, Sequence
 
 from config import MEMBER_READ_WHITELIST
 from feishu import schema as S
@@ -112,20 +112,27 @@ class MemberQueryResult:
 # --------------------------------------------------------------------------
 
 
+def _requestable(names: Iterable[str]) -> set[str]:
+    """只留下名字短到能进请求投影的字段。
+
+    超长字段名会让飞书拒掉**整个主表查询** —— 那时候一个人都找不到，
+    比少读一列严重得多。
+    """
+    return {n for n in names if n and S.is_requestable_field_name(n)}
+
+
 def main_projection(registry: ActivityRegistry, spec: Any) -> list[str] | None:
     """主表最小字段投影：白名单 ∩ 实际存在 ∪ 活动 link 字段名。"""
     existing = set(registry.main_field_names(spec.key))
-    link_names = {
-        t.main_link_field
-        for t in registry.tables_of(spec.key)
-        if t.main_link_field
-    }
+    link_names = _requestable(
+        t.main_link_field for t in registry.tables_of(spec.key) if t.main_link_field
+    )
     if not existing:
         # 主表字段没读到：退回白名单（不含任何活动 link 名），
         # 至少保证匹配所需的姓名 / 学号在投影里。
-        return sorted(set(MEMBER_READ_WHITELIST) | link_names)
+        return sorted(_requestable(set(MEMBER_READ_WHITELIST) | link_names))
 
-    allowed = {n for n in MEMBER_READ_WHITELIST if n in existing}
+    allowed = _requestable(n for n in MEMBER_READ_WHITELIST if n in existing)
     return sorted(allowed | link_names)
 
 

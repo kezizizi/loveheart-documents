@@ -1,11 +1,14 @@
 """业务层：分享海报生成（服务端 Pillow 拼版）。
 
-版式（1080×1620）：
+版式（宽固定 1080，**高度随活动条数生长**）：
     ① 顶部品牌带 —— 官方栏图（手 + 心），全宽出血
     ② 深红姓名带 —— 与栏图底色无缝衔接，奶油色字
     ③ 三张统计卡
-    ④ 时间轴（按可用高度动态决定放几条）
+    ④ 时间轴 —— **收录全部活动**，画幅不够长就往下长，不截断
     ⑤ 页脚（小爱线稿 · 口号 · 二维码 · 数据截止日）
+
+版式是一条自上而下的定高流水线（每行活动固定 ``TIMELINE_ROW_H``），
+所以总高度能在落笔之前算准 —— 见 :func:`poster_height`。
 
 Streamlit Cloud 上没有无头浏览器，截图方案不可行，因此用 Pillow 直接画。
 中文字体**必须随仓库提交**（``assets/fonts/NotoSansSC-VF.ttf``，OFL 开源）。
@@ -41,11 +44,19 @@ from feishu.models import Footprint, MembershipDate
 from services.membership_date import format_date
 
 POSTER_WIDTH = 1080
-POSTER_HEIGHT = 1620
+# 基准高度：活动少时用它；活动多时按内容变长（见 poster_height）。
+POSTER_MIN_HEIGHT = 1620
+# 时间轴每行的高度。版式的定高单位。
+TIMELINE_ROW_H = 50
 
 _PAD = 72
 _CARD_RADIUS = 26
-_LINE_H = 50
+_BAND_H = 176
+_STATS_TOP_GAP = 40
+_CARD_H = 164
+_STATS_BOTTOM_GAP = 34
+_SECTION_H = 54
+_FOOTER_GAP = 40
 _FOOTER_H = 206
 
 BANNER_FILE = "banner_band.png"
@@ -53,6 +64,31 @@ QR_FILE = "qr.png"
 
 # 深红底上的次要文字：奶油色压暗一档
 _ON_CRIMSON_SOFT = "#D8CDA8"
+
+
+def _open_banner() -> Image.Image | None:
+    return _open_asset(BANNER_FILE)
+
+
+def banner_height() -> int:
+    """品牌带按宽度铺满后的高度；没有素材时为 0。"""
+    banner = _open_banner()
+    if banner is None:
+        return 0
+    return int(POSTER_WIDTH * banner.height / banner.width)
+
+
+def poster_height(footprint: Footprint, *, banner_h: int | None = None) -> int:
+    """这张海报需要多高 —— 把每一条活动都放下，不够就往下长。
+
+    版式自上而下都是定高的，所以高度能在落笔之前算准；
+    正因为算得准，才不需要「画不下就截断」那一套。
+    """
+    top = banner_height() if banner_h is None else banner_h
+    top += _BAND_H + _STATS_TOP_GAP + _CARD_H + _STATS_BOTTOM_GAP
+    top += _SECTION_H + len(footprint.timeline) * TIMELINE_ROW_H
+    top += _FOOTER_GAP + _FOOTER_H + _PAD
+    return max(POSTER_MIN_HEIGHT, top)
 
 
 # --------------------------------------------------------------------------
@@ -170,18 +206,25 @@ def render_poster(
     data_as_of: date | None = None,
     subtitle: str = "",
 ) -> bytes:
-    """渲染 1080×1620 的爱心足迹海报，返回 PNG 字节。
+    """渲染爱心足迹海报，返回 PNG 字节。
+
+    宽度固定 1080，**高度随活动条数生长** —— 每一条活动都画得下，
+    不会再出现「…还有 N 条记录没画下」。字体大小与排版规则一概不变。
 
     海报上**只出现姓名**，不含院系、年级、学号等额外个人信息。
     """
-    img = Image.new("RGB", (POSTER_WIDTH, POSTER_HEIGHT), SURFACE_BG)
+    banner = _open_banner()
+    banner_h = (
+        int(POSTER_WIDTH * banner.height / banner.width) if banner is not None else 0
+    )
+    height = poster_height(footprint, banner_h=banner_h)
+
+    img = Image.new("RGB", (POSTER_WIDTH, height), SURFACE_BG)
     draw = ImageDraw.Draw(img)
 
     # ---- ① 品牌带：官方栏图 ---------------------------------------------
-    banner = _open_asset(BANNER_FILE)
     y = 0
     if banner is not None:
-        banner_h = int(POSTER_WIDTH * banner.height / banner.width)
         img.paste(
             banner.convert("RGB").resize((POSTER_WIDTH, banner_h), Image.LANCZOS),
             (0, 0),
@@ -189,8 +232,7 @@ def render_poster(
         y = banner_h
 
     # ---- ② 深红姓名带（与栏图底色无缝衔接） ------------------------------
-    band_h = 176
-    draw.rectangle((0, y, POSTER_WIDTH, y + band_h), fill=BRAND_CRIMSON)
+    draw.rectangle((0, y, POSTER_WIDTH, y + _BAND_H), fill=BRAND_CRIMSON)
 
     f_name = _load_font(62, bold=True)
     _center_text(draw, f"{name}的爱心足迹", f_name, y + 44, CREAM_GOLD, POSTER_WIDTH)
@@ -211,11 +253,11 @@ def render_poster(
             _ON_CRIMSON_SOFT,
             POSTER_WIDTH,
         )
-    y += band_h
+    y += _BAND_H
 
     # ---- ③ 统计卡 --------------------------------------------------------
-    y += 40
-    card_h = 164
+    y += _STATS_TOP_GAP
+    card_h = _CARD_H
     gap = 24
     card_w = (POSTER_WIDTH - _PAD * 2 - gap * 2) // 3
     f_label = _load_font(27)
@@ -240,26 +282,23 @@ def render_poster(
         draw.text((x + 26, y + 66), value, font=f_value, fill=BRAND_CRIMSON)
         unit_x = x + 26 + _text_w(draw, value, f_value) + 6
         draw.text((unit_x, y + 100), unit, font=f_unit, fill=INK_SOFT)
-    y += card_h + 34
+    y += card_h + _STATS_BOTTOM_GAP
 
-    # ---- ④ 时间轴 --------------------------------------------------------
+    # ---- ④ 时间轴（全部活动，一条不落） ----------------------------------
     f_section = _load_font(32, bold=True)
     draw.rounded_rectangle((_PAD, y + 6, _PAD + 5, y + 34), radius=3, fill=BRAND_CRIMSON)
     draw.text((_PAD + 18, y), "爱心足迹", font=f_section, fill=INK)
-    y += 54
+    y += _SECTION_H
 
-    footer_top = POSTER_HEIGHT - _PAD - _FOOTER_H
+    footer_top = height - _PAD - _FOOTER_H
 
     f_date = _load_font(24)
     f_act = _load_font(28)
     f_hours = _load_font(26)
     dot_x = _PAD + 12
 
-    total_items = len(footprint.timeline)
-    capacity = int(max(1, (footer_top - 14 - y) // _LINE_H))
-    shown = capacity if total_items <= capacity else max(1, capacity - 1)
-
-    for item in footprint.timeline[:shown]:
+    # 高度已经按「条数 × 行高」算过了，所以这里全画 —— 不再截断。
+    for item in footprint.timeline:
         color = group_color(item.group)
         draw.ellipse((dot_x - 8, y + 13, dot_x + 8, y + 29), fill=color)
         when = format_date(item.event_time_ms, "%Y.%m.%d") or (item.term or "—")
@@ -279,16 +318,7 @@ def render_poster(
                 font=f_hours,
                 fill=BRAND_CRIMSON,
             )
-        y += _LINE_H
-
-    remaining = total_items - shown
-    if remaining > 0:
-        draw.text(
-            (_PAD + 34, y + 9),
-            f"…还有 {remaining} 条记录没画下",
-            font=f_date,
-            fill=INK_FAINT,
-        )
+        y += TIMELINE_ROW_H
 
     # ---- ⑤ 页脚 ----------------------------------------------------------
     mascot = _pick_mascot()
